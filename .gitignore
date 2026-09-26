@@ -116,4 +116,6 @@ core.*
 /SOUL.md
 /string_cleaner.py
 /.codexignore
-/android_resource_cleaner.py
+/android_resource_cleaner.py_backups/
+.bak_fix/
+*.before_*
