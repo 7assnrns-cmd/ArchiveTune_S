@@ -255,17 +255,19 @@ fun ArchiveTuneTheme(
         if (colorScheme.surface != lastSurface) {
             val previous = lastSurface
             lastSurface = colorScheme.surface
-            curtainColor = previous
-            curtainProgress = 0f
+            circlePreviousSurface = previous
+            circleTargetSurface = colorScheme.surface
+            circleProgress = 0f
             androidx.compose.animation.core.animate(
                 initialValue = 0f,
                 targetValue = 1f,
                 animationSpec = tween(
                     durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1),
                 ),
-            ) { value, _ -> curtainProgress = value }
-            curtainProgress = 1f
-            curtainColor = null
+            ) { value, _ -> circleProgress = value }
+            circleProgress = 1f
+            circlePreviousSurface = null
+            circleTargetSurface = null
         }
     }
 
