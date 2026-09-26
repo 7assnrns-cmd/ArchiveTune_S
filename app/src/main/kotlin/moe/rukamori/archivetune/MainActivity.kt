@@ -185,6 +185,7 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlinx.coroutines.flow.first
@@ -915,7 +916,18 @@ class MainActivity : ComponentActivity() {
                     themeColor = if (!enableDynamicTheme) customThemeColor else DefaultThemeColor
                     return@LaunchedEffect
                 }
-                playerConnection.service.currentMediaMetadata.collectLatest { song ->
+                val themeFlow =
+                    if (dynamicThemeSyncWithCrossfade) {
+                        kotlinx.coroutines.flow.combine(
+                            playerConnection.service.currentMediaMetadata,
+                            playerConnection.service.crossfadeThemeTarget,
+                        ) { current, incoming ->
+                            incoming ?: current
+                        }
+                    } else {
+                        playerConnection.service.currentMediaMetadata
+                    }
+                themeFlow.collectLatest { song ->
                     if (song != null) {
                         withContext(Dispatchers.Default) {
                             try {

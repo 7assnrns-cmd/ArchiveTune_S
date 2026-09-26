@@ -483,6 +483,16 @@ class MusicService :
     private val historyRecordingJobs = ConcurrentHashMap<Long, kotlinx.coroutines.Deferred<ImmediateHistoryResult>>()
 
     val currentMediaMetadata = MutableStateFlow<moe.rukamori.archivetune.models.MediaMetadata?>(null)
+
+    /**
+     * Crossfade theme signal — set to the incoming track's MediaMetadata
+     * at the moment a crossfade starts (before the audio fade begins),
+     * and cleared once the crossfade completes. The UI can then update
+     * the dynamic theme in lockstep with the audio transition instead
+     * of waiting for the handoff.
+     */
+    internal val crossfadeThemeTarget =
+        MutableStateFlow<moe.rukamori.archivetune.models.MediaMetadata?>(null)
     val queueRestoreCompleted = MutableStateFlow(false)
     val infiniteQueueLoading = MutableStateFlow(false)
     private val playerInitialized = MutableStateFlow(false)
