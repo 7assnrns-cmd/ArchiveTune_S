@@ -394,12 +394,7 @@ fun PlayerSettings(navController: NavController) {
                         title = { Text(stringResource(R.string.skip_silence)) },
                         icon = { Icon(painterResource(R.drawable.fast_forward),
 
-                    SwitchPreference(
-                        title = { Text("Manual selection crossfade") },
-                        description = "Apply crossfade when you change songs manually (next/previous/queue tap).",
-                        checked = crossfadeManualSelection,
-                        onCheckedChange = onCrossfadeManualSelectionChange,
-                    ) null) },
+                    null) },
                         checked = skipSilence,
                         onCheckedChange = onSkipSilenceChange,
                         isEnabled = !audioOffload,
