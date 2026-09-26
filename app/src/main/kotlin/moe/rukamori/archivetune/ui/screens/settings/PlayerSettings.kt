@@ -48,6 +48,7 @@ import moe.rukamori.archivetune.constants.AutoStartOnBluetoothKey
 import moe.rukamori.archivetune.constants.CrossfadeDurationKey
 import moe.rukamori.archivetune.constants.CrossfadeEnabledKey
 import moe.rukamori.archivetune.constants.CrossfadeGaplessKey
+import moe.rukamori.archivetune.constants.CrossfadeManualSelectionKey
 import moe.rukamori.archivetune.constants.DeviceMutePlaybackRecoveryVolumeKey
 import moe.rukamori.archivetune.constants.ExternalDownloaderEnabledKey
 import moe.rukamori.archivetune.constants.ExternalDownloaderPackageKey
@@ -258,6 +259,12 @@ fun PlayerSettings(navController: NavController) {
             defaultValue = false,
         )
     var showArtistSeparatorsDialog by remember { mutableStateOf(false) }
+
+    val (crossfadeManualSelection, onCrossfadeManualSelectionChange) =
+        rememberPreference(
+            CrossfadeManualSelectionKey,
+            defaultValue = true,
+        )
     var showExternalDownloaderPackageDialog by remember { mutableStateOf(false) }
 
     if (showArtistSeparatorsDialog) {
@@ -391,7 +398,14 @@ fun PlayerSettings(navController: NavController) {
                 item {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.skip_silence)) },
-                        icon = { Icon(painterResource(R.drawable.fast_forward), null) },
+                        icon = { Icon(painterResource(R.drawable.fast_forward),
+
+                    SwitchPreference(
+                        title = { Text("Manual selection crossfade") },
+                        description = "Apply crossfade when you change songs manually (next/previous/queue tap).",
+                        checked = crossfadeManualSelection,
+                        onCheckedChange = onCrossfadeManualSelectionChange,
+                    ) null) },
                         checked = skipSilence,
                         onCheckedChange = onSkipSilenceChange,
                         isEnabled = !audioOffload,

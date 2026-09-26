@@ -10,6 +10,7 @@
 package moe.rukamori.archivetune.playback
 
 import android.app.ActivityManager
+import moe.rukamori.archivetune.constants.CrossfadeManualSelectionKey
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
@@ -506,6 +507,7 @@ class MusicService :
     private var crossfadeEnabled = false
     private var crossfadeDurationMs = 0L
     private var crossfadeGapless = false
+    private var crossfadeManualSelectionEnabled = true
     private var crossfadeTriggerJob: Job? = null
     private var crossfadeJob: Job? = null
     private var secondaryCrossfadePlayer: ExoPlayer? = null
@@ -2604,6 +2606,145 @@ class MusicService :
         localPlayer.pause()
         localPlayer.playWhenReady = false
     }
+
+    // ─────────────────────────────────────────────────────────────
+    // Manual crossfade (v15.1.0+)
+    // ─────────────────────────────────────────────────────────────
+    //
+    // Auto crossfade continues to run through scheduleCrossfade() and is
+    // triggered when a song ends naturally. The functions below add a
+    // separate entry point for explicit user-driven song changes (next /
+    // previous / queue tap / external selection) so the same fade engine
+    // can be reused without waiting for end of track.
+
+    fun requestCrossfadeToIndex(targetIndex: Int): Boolean {
+        if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
+        if (!::player.isInitialized) return false
+        if (isCrossfading || secondaryCrossfadePlayer != null) return false
+        if (!player.playWhenReady) return false
+        if (player.currentMediaItem == null) return false
+        if (player.currentMetadata?.isPodcast == true) return false
+        if (targetIndex !in 0 until player.mediaItemCount) return false
+        if (targetIndex == player.currentMediaItemIndex) return false
+
+        val targetItem = player.getMediaItemAt(targetIndex)
+        val target = CrossfadeTarget(targetIndex, targetItem.mediaId)
+        if (target.mediaId.isBlank()) return false
+        if (targetItem.metadata?.isPodcast == true) return false
+
+        val incomingPlayer = prepareSecondaryCrossfadePlayer(target) ?: return false
+
+        val duration = effectiveCrossfadeDuration(player.duration) ?: crossfadeDurationMs
+        if (duration < MIN_CROSSFADE_DURATION_MS) {
+            releaseSecondaryCrossfadePlayer()
+            return false
+        }
+
+        crossfadeTriggerJob?.cancel()
+        crossfadeTriggerJob = null
+        crossfadeJob?.cancel()
+        crossfadeJob =
+            scope.launch {
+                isCrossfading = true
+                crossfadeProgress = 0f
+                crossfadeBaseVolume = player.volume
+                crossfadeIncomingBaseVolume = player.volume
+                crossfadePlaybackRequested = true
+                localPlayer.pauseAtEndOfMediaItems = false
+
+                try {
+                    val requiredBufferedMs = requiredCrossfadeStartBufferMs(duration)
+                    if (!awaitCrossfadePlayerReady(incomingPlayer, CROSSFADE_READY_TIMEOUT_MS, requiredBufferedMs)) {
+                        abortCrossfadeAndResumePrimary("manual_crossfade_secondary_not_ready")
+                        return@launch
+                    }
+
+                    incomingPlayer.playbackParameters = player.playbackParameters
+                    incomingPlayer.playWhenReady = true
+                    incomingPlayer.play()
+
+                    val startMs = android.os.SystemClock.elapsedRealtime()
+                    while (isActive) {
+                        val elapsedMs = android.os.SystemClock.elapsedRealtime() - startMs
+                        crossfadeProgress = (elapsedMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                        applyCrossfadeVolumes(
+                            crossfadeProgress,
+                            crossfadeBaseVolume,
+                            crossfadeIncomingBaseVolume,
+                            localPlayer,
+                            incomingPlayer,
+                        )
+                        if (crossfadeProgress >= 1f) break
+                        delay(CROSSFADE_FRAME_MS)
+                    }
+
+                    // Primary is silent; safely move it to the target.
+                    localPlayer.volume = 0f
+                    player.pause()
+                    player.seekTo(targetIndex, incomingPlayer.currentPosition.coerceAtLeast(0L))
+                    player.prepare()
+
+                    val handoffDeadline =
+                        android.os.SystemClock.elapsedRealtime() + CROSSFADE_HANDOFF_READY_TIMEOUT_MS
+                    while (isActive && android.os.SystemClock.elapsedRealtime() < handoffDeadline) {
+                        if (player.playbackState == Player.STATE_READY) break
+                        if (player.playbackState == Player.STATE_IDLE) player.prepare()
+                        if (player.playbackState == Player.STATE_ENDED) break
+                        delay(25L)
+                    }
+
+                    if (player.playbackState == Player.STATE_READY) {
+                        player.playWhenReady = true
+                        localPlayer.volume = crossfadeIncomingBaseVolume
+                    } else {
+                        Timber.tag(TAG).w("Manual crossfade: primary handoff failed; keeping secondary audible")
+                        incomingPlayer.volume = crossfadeIncomingBaseVolume
+                    }
+
+                    scheduleCrossfade()
+                } catch (cancellation: CancellationException) {
+                    throw cancellation
+                } catch (error: Exception) {
+                    Timber.tag(TAG).w(error, "Manual crossfade failed")
+                    abortCrossfadeAndResumePrimary("manual_crossfade_exception")
+                } finally {
+                    isCrossfading = false
+                    crossfadeProgress = 0f
+                    crossfadePlaybackRequested = false
+                    releaseSecondaryCrossfadePlayer()
+                    if (::player.isInitialized && player.volume == 0f) {
+                        localPlayer.volume = crossfadeBaseVolume
+                    }
+                }
+            }
+        return true
+    }
+
+    fun requestCrossfadeToNext(): Boolean {
+        if (!::player.isInitialized) return false
+        val next = player.nextMediaItemIndex
+        if (next == C.INDEX_UNSET) return false
+        if (next == player.currentMediaItemIndex) return false
+        return requestCrossfadeToIndex(next)
+    }
+
+    fun requestCrossfadeToPrevious(): Boolean {
+        if (!::player.isInitialized) return false
+        // Match ExoPlayer: if past the "previous" threshold, restart current
+        // song; the caller handles that path.
+        if (player.currentPosition > player.maxSeekToPreviousPosition) return false
+        val prev = player.previousMediaItemIndex
+        if (prev == C.INDEX_UNSET) return false
+        return requestCrossfadeToIndex(prev)
+    }
+
+
+        dataStore.data
+            .map { it[CrossfadeManualSelectionKey] ?: true }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                crossfadeManualSelectionEnabled = enabled
+            }
 
     private fun scheduleCrossfade() {
         if (!::player.isInitialized) return

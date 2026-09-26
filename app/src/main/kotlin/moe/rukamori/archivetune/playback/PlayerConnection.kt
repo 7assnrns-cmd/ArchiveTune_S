@@ -299,6 +299,9 @@ class PlayerConnection(
     }
 
     fun seekToNext() {
+        // Try manual crossfade first; falls through to instant seek if
+        // the engine refuses (feature off, busy, secondary not ready).
+        if (service.requestCrossfadeToNext()) return
         val state = service.togetherSessionState.value as? moe.rukamori.archivetune.together.TogetherSessionState.Joined
         if (state?.role is moe.rukamori.archivetune.together.TogetherRole.Guest) {
             service.requestTogetherControl(moe.rukamori.archivetune.together.ControlAction.SkipNext)
@@ -310,6 +313,8 @@ class PlayerConnection(
     }
 
     fun seekToPrevious() {
+        // Try manual crossfade first; falls through to instant seek.
+        if (service.requestCrossfadeToPrevious()) return
         val state = service.togetherSessionState.value as? moe.rukamori.archivetune.together.TogetherSessionState.Joined
         if (state?.role is moe.rukamori.archivetune.together.TogetherRole.Guest) {
             service.requestTogetherControl(moe.rukamori.archivetune.together.ControlAction.SkipPrevious)
