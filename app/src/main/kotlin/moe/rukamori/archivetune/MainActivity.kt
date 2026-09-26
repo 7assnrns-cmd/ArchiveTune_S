@@ -819,10 +819,6 @@ class MainActivity : ComponentActivity() {
                 DynamicThemeAnimationDurationKey,
                 defaultValue = 800,
             )
-            val dynamicThemeAnimationStyleName by rememberPreference(
-                DynamicThemeAnimationStyleKey,
-                defaultValue = DynamicThemeAnimationStyle.SMOOTH.name,
-            )
             val dynamicThemeSyncWithCrossfade by rememberPreference(
                 DynamicThemeSyncWithCrossfadeKey,
                 defaultValue = false,
@@ -831,8 +827,6 @@ class MainActivity : ComponentActivity() {
                 CrossfadeDurationKey,
                 defaultValue = 5f,
             )
-            val dynamicThemeAnimationStyle =
-                DynamicThemeAnimationStyle.fromName(dynamicThemeAnimationStyleName)
             val effectiveThemeDurationMs =
                 if (dynamicThemeSyncWithCrossfade) {
                     (crossfadeSeconds.coerceIn(0f, 10f) * 1000f).toInt()
@@ -972,8 +966,7 @@ class MainActivity : ComponentActivity() {
                 fontPreference = fontPreference,
                 customFontUri = customFontUri,
                 dynamicThemeAnimationDurationMs = effectiveThemeDurationMs,
-                dynamicThemeAnimationStyle = dynamicThemeAnimationStyle,
-                dynamicThemeSyncWithCrossfade = dynamicThemeSyncWithCrossfade,
+                                dynamicThemeSyncWithCrossfade = dynamicThemeSyncWithCrossfade,
                 dynamicThemeAnimationStyle = dynamicThemeAnimationStyle,
             ) {
                 val navController = rememberNavController()
