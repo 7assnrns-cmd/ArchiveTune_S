@@ -15,6 +15,7 @@ import android.os.Build
 import android.util.Base64
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FiniteAnimationSpec
+import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -81,6 +82,7 @@ fun ArchiveTuneTheme(
     disableAnimations: Boolean = false,
     fontPreference: AppFontPreference = AppFontPreference.DEFAULT,
     customFontUri: String = "",
+    dynamicThemeAnimationDurationMs: Int = 800,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -154,13 +156,24 @@ fun ArchiveTuneTheme(
             if (darkTheme && pureBlack) baseColorScheme.pureBlack(true) else baseColorScheme
         }
 
+    // Dynamic theme animation duration is user-configurable.
+    // 0 ms → snap directly to the new palette (no interpolation).
+    val dynamicThemeSpec: FiniteAnimationSpec<Color> =
+        remember(dynamicThemeAnimationDurationMs) {
+            if (dynamicThemeAnimationDurationMs <= 0) {
+                snap()
+            } else {
+                tween(durationMillis = dynamicThemeAnimationDurationMs)
+            }
+        }
+
     val animatedColorScheme =
         if (disableAnimations) {
             colorScheme
         } else {
             animateColorScheme(
                 targetColorScheme = colorScheme,
-                animationSpec = motionScheme.defaultEffectsSpec(),
+                animationSpec = dynamicThemeSpec,
             )
         }
 

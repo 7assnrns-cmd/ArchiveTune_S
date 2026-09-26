@@ -9,6 +9,10 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import moe.rukamori.archivetune.ui.component.ActionPromptDialog
+import androidx.compose.material3.SliderDefaults
+import androidx.compose.material3.rememberSliderState
+import moe.rukamori.archivetune.constants.DynamicThemeAnimationDurationKey
 import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
@@ -154,6 +158,13 @@ fun AppearanceSettings(navController: NavController) {
             DynamicThemeKey,
             defaultValue = true,
         )
+
+    val (dynamicThemeAnimationDurationMs, onDynamicThemeAnimationDurationChange) =
+        rememberPreference(
+            DynamicThemeAnimationDurationKey,
+            defaultValue = 800,
+        )
+
     val (wallpaperExtractionFailed) =
         rememberPreference(
             WallpaperExtractionFailedKey,
@@ -537,6 +548,112 @@ fun AppearanceSettings(navController: NavController) {
                         icon = { Icon(painterResource(R.drawable.palette), null) },
                         checked = dynamicTheme,
                         onCheckedChange = onDynamicThemeChange,
+                    )
+                }
+
+                item(visible = dynamicTheme) {
+                    var showDurationDialog by remember { mutableStateOf(false) }
+                    var sliderValueMs by remember {
+                        mutableFloatStateOf(dynamicThemeAnimationDurationMs.toFloat().coerceIn(0f, 3000f))
+                    }
+
+                    if (showDurationDialog) {
+                        ActionPromptDialog(
+                            titleBar = {
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.Center,
+                                ) {
+                                    Text(
+                                        text = stringResource(R.string.dynamic_theme_animation_duration_title),
+                                        overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis,
+                                        maxLines = 1,
+                                        style = MaterialTheme.typography.headlineSmall,
+                                    )
+                                }
+                            },
+                            onDismiss = { showDurationDialog = false },
+                            onConfirm = {
+                                val ms = sliderValueMs.roundToInt().coerceIn(0, 3000)
+                                showDurationDialog = false
+                                onDynamicThemeAnimationDurationChange(ms)
+                            },
+                            onCancel = {
+                                sliderValueMs = dynamicThemeAnimationDurationMs.toFloat().coerceIn(0f, 3000f)
+                                showDurationDialog = false
+                            },
+                            onReset = {
+                                sliderValueMs = 800f
+                            },
+                            content = {
+                                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                                    val ms = sliderValueMs.roundToInt().coerceIn(0, 3000)
+                                    Text(
+                                        text =
+                                            if (ms <= 0) {
+                                                stringResource(R.string.dynamic_theme_animation_duration_instant)
+                                            } else {
+                                                stringResource(
+                                                    R.string.dynamic_theme_animation_duration_ms,
+                                                    ms,
+                                                )
+                                            },
+                                        style = MaterialTheme.typography.bodyLarge,
+                                    )
+
+                                    Spacer(Modifier.height(12.dp))
+
+                                    Text(
+                                        text = stringResource(R.string.dynamic_theme_animation_duration_description),
+                                        style = MaterialTheme.typography.bodyMedium,
+                                        color = MaterialTheme.colorScheme.secondary,
+                                    )
+
+                                    Spacer(Modifier.height(16.dp))
+
+                                    val sliderState =
+                                        rememberSliderState(
+                                            value = sliderValueMs,
+                                            steps = 29,
+                                            valueRange = 0f..3000f,
+                                            onValueChangeFinished = {},
+                                        )
+                                    sliderState.onValueChange = { sliderValueMs = it.coerceIn(0f, 3000f) }
+                                    sliderState.value = sliderValueMs
+
+                                    Slider(
+                                        state = sliderState,
+                                        modifier = Modifier.fillMaxWidth(),
+                                        track = {
+                                            SliderDefaults.Track(
+                                                sliderState = sliderState,
+                                                trackCornerSize = 12.dp,
+                                            )
+                                        },
+                                    )
+                                }
+                            },
+                        )
+                    }
+
+                    val displayText =
+                        if (dynamicThemeAnimationDurationMs <= 0) {
+                            stringResource(R.string.dynamic_theme_animation_duration_instant)
+                        } else {
+                            stringResource(
+                                R.string.dynamic_theme_animation_duration_ms,
+                                dynamicThemeAnimationDurationMs,
+                            )
+                        }
+
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.dynamic_theme_animation_duration_title)) },
+                        description = displayText,
+                        icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
+                        onClick = {
+                            sliderValueMs = dynamicThemeAnimationDurationMs.toFloat().coerceIn(0f, 3000f)
+                            showDurationDialog = true
+                        },
                     )
                 }
 

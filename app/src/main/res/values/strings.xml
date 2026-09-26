@@ -1130,4 +1130,8 @@
     <string name="scheduled_backup_update_failed">Scheduled backup settings could not be saved</string>
     <string name="gatekeeper_connection_blocked">Connection blocked by ArchiveTune Remote. This app could not be verified as an official ArchiveTune build. Install an official build from https://github.com/rukamori/ArchiveTune or https://t.me/ArchiveTuneGC.</string>
     <string name="local_songs_metadata_unavailable">Imported %1$d songs. Online metadata is unavailable; file tags were kept.</string>
+    <string name="dynamic_theme_animation_duration_title">Dynamic theme animation duration</string>
+    <string name="dynamic_theme_animation_duration_description">How long the theme takes to blend into the artwork color. 0 = instant.</string>
+    <string name="dynamic_theme_animation_duration_ms">%1$d ms</string>
+    <string name="dynamic_theme_animation_duration_instant">Instant</string>
 </resources>

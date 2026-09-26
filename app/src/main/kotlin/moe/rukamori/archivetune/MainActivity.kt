@@ -205,6 +205,7 @@ import moe.rukamori.archivetune.constants.DefaultOpenTabKey
 import moe.rukamori.archivetune.constants.DisableAnimationsKey
 import moe.rukamori.archivetune.constants.DisableScreenshotKey
 import moe.rukamori.archivetune.constants.DynamicThemeKey
+import moe.rukamori.archivetune.constants.DynamicThemeAnimationDurationKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
 import moe.rukamori.archivetune.constants.FontPreferenceKey
 import moe.rukamori.archivetune.constants.HasPressedStarKey
@@ -809,6 +810,10 @@ class MainActivity : ComponentActivity() {
             }
 
             val enableDynamicTheme by rememberPreference(DynamicThemeKey, defaultValue = true)
+            val dynamicThemeAnimationDurationMs by rememberPreference(
+                DynamicThemeAnimationDurationKey,
+                defaultValue = 800,
+            )
             val customThemeColorValue by rememberPreference(CustomThemeColorKey, defaultValue = "default")
             val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
             val defaultDisableAnimations = remember(this@MainActivity) { applicationContext.isLowRamDevice() }
@@ -924,6 +929,7 @@ class MainActivity : ComponentActivity() {
                 disableAnimations = disableAnimations,
                 fontPreference = fontPreference,
                 customFontUri = customFontUri,
+                dynamicThemeAnimationDurationMs = dynamicThemeAnimationDurationMs,
             ) {
                 val navController = rememberNavController()
                 val onboardingViewModel: OnboardingViewModel = hiltViewModel()
