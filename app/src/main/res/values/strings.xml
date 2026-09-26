@@ -1138,4 +1138,6 @@
     <string name="dynamic_theme_style_smooth">Smooth (crossfade colors)</string>
     <string name="dynamic_theme_style_circle">Circle from player</string>
     <string name="dynamic_theme_style_instant">Instant</string>
+    <string name="dynamic_theme_sync_with_crossfade_title">Sync theme with crossfade</string>
+    <string name="dynamic_theme_sync_with_crossfade_description">Make the theme transition last exactly as long as the audio crossfade.</string>
 </resources>

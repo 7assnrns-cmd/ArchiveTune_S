@@ -193,6 +193,8 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.aod.ACTION_AOD_MODE
 import moe.rukamori.archivetune.constants.AodAutoStartScreenOffKey
+import moe.rukamori.archivetune.constants.CrossfadeDurationKey
+import moe.rukamori.archivetune.constants.DynamicThemeSyncWithCrossfadeKey
 import moe.rukamori.archivetune.constants.AppBarHeight
 import moe.rukamori.archivetune.constants.AppFontPreference
 import moe.rukamori.archivetune.constants.AppLanguageKey
@@ -820,6 +822,26 @@ class MainActivity : ComponentActivity() {
                 DynamicThemeAnimationStyleKey,
                 defaultValue = DynamicThemeAnimationStyle.SMOOTH.name,
             )
+            val dynamicThemeSyncWithCrossfade by rememberPreference(
+                DynamicThemeSyncWithCrossfadeKey,
+                defaultValue = false,
+            )
+            val crossfadeSeconds by rememberPreference(
+                CrossfadeDurationKey,
+                defaultValue = 5f,
+            )
+            val dynamicThemeAnimationStyle =
+                DynamicThemeAnimationStyle.fromName(dynamicThemeAnimationStyleName)
+            val effectiveThemeDurationMs =
+                if (dynamicThemeSyncWithCrossfade) {
+                    (crossfadeSeconds.coerceIn(0f, 10f) * 1000f).toInt()
+                } else {
+                    dynamicThemeAnimationDurationMs
+                }
+            val dynamicThemeAnimationStyleName by rememberPreference(
+                DynamicThemeAnimationStyleKey,
+                defaultValue = DynamicThemeAnimationStyle.SMOOTH.name,
+            )
             val dynamicThemeAnimationStyle =
                 DynamicThemeAnimationStyle.fromName(dynamicThemeAnimationStyleName)
             val customThemeColorValue by rememberPreference(CustomThemeColorKey, defaultValue = "default")
@@ -937,7 +959,9 @@ class MainActivity : ComponentActivity() {
                 disableAnimations = disableAnimations,
                 fontPreference = fontPreference,
                 customFontUri = customFontUri,
-                dynamicThemeAnimationDurationMs = dynamicThemeAnimationDurationMs,
+                dynamicThemeAnimationDurationMs = effectiveThemeDurationMs,
+                dynamicThemeAnimationStyle = dynamicThemeAnimationStyle,
+                dynamicThemeSyncWithCrossfade = dynamicThemeSyncWithCrossfade,
                 dynamicThemeAnimationStyle = dynamicThemeAnimationStyle,
             ) {
                 val navController = rememberNavController()

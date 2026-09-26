@@ -1135,7 +1135,7 @@ fun Queue(
                                                                         ),
                                                                     )
                                                                 } else {
-                                                                    playerConnection.player.seekToDefaultPosition(
+                                                                    playerConnection.seekToIndexWithCrossfade(
                                                                         window.firstPeriodIndex,
                                                                     )
                                                                     playerConnection.player.playWhenReady = true

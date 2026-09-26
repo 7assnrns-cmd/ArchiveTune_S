@@ -9,6 +9,7 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import moe.rukamori.archivetune.constants.DynamicThemeSyncWithCrossfadeKey
 import androidx.compose.ui.graphics.Color
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.ListItem
@@ -176,6 +177,13 @@ fun AppearanceSettings(navController: NavController) {
             DynamicThemeAnimationStyleKey,
             defaultValue = DynamicThemeAnimationStyle.SMOOTH.name,
         )
+
+    val (dynamicThemeSyncWithCrossfade, onDynamicThemeSyncWithCrossfadeChange) =
+        rememberPreference(
+            DynamicThemeSyncWithCrossfadeKey,
+            defaultValue = false,
+        )
+
     val dynamicThemeAnimationStyle =
         DynamicThemeAnimationStyle.fromName(dynamicThemeAnimationStyleName)
     var showAnimationStyleDialog by remember { mutableStateOf(false) }
@@ -708,6 +716,14 @@ fun AppearanceSettings(navController: NavController) {
                             ),
                         icon = { Icon(painterResource(R.drawable.palette), null) },
                         onClick = { showAnimationStyleDialog = true },
+                    )
+
+                    SwitchPreference(
+                        title = { Text(stringResource(R.string.dynamic_theme_sync_with_crossfade_title)) },
+                        description = stringResource(R.string.dynamic_theme_sync_with_crossfade_description),
+                        icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
+                        checked = dynamicThemeSyncWithCrossfade,
+                        onCheckedChange = onDynamicThemeSyncWithCrossfadeChange,
                     )
 
                     PreferenceEntry(

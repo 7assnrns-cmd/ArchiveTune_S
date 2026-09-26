@@ -109,6 +109,7 @@ fun ArchiveTuneTheme(
     customFontUri: String = "",
     dynamicThemeAnimationDurationMs: Int = 800,
     dynamicThemeAnimationStyle: DynamicThemeAnimationStyle = DynamicThemeAnimationStyle.SMOOTH,
+    dynamicThemeSyncWithCrossfade: Boolean = false,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -193,13 +194,16 @@ fun ArchiveTuneTheme(
             }
         }
 
-    val usesSpatialReveal = dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER
-
+    // ── Theme animation ─────────────────────────────────────────
+    //
+    // Smooth:           all colors interpolate together (default)
+    // Circle from player: the previous surface color is painted as a
+    //                     semi-transparent curtain; a soft transparent
+    //                     circle grows from the bottom of the screen to
+    //                     reveal the smoothly interpolating theme.
+    // Instant:          no animation at all.
     val animatedColorScheme =
-        if (disableAnimations || usesSpatialReveal) {
-            // In spatial reveal mode the theme switches instantly and the
-            // visual transition is driven entirely by the reveal overlay, so
-            // there is no color interpolation here.
+        if (disableAnimations || dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.INSTANT) {
             colorScheme
         } else {
             animateColorScheme(
@@ -208,43 +212,41 @@ fun ArchiveTuneTheme(
             )
         }
 
-    // ── Spatial reveal state ────────────────────────────────────────
-    // The overlay paints the previous surface color in a radial gradient
-    // whose transparent center grows from the player position upward.
-    // No screenshot is taken: the theme underneath flips instantly, and
-    // the overlay softly retracts to reveal it.
-    var revealOldSurface by remember { mutableStateOf<Color?>(null) }
-    var revealProgress by remember { mutableFloatStateOf(1f) }
-    var lastSurfaceColor by remember { mutableStateOf(colorScheme.surface) }
+    var curtainColor by remember { mutableStateOf<Color?>(null) }
+    var curtainProgress by remember { mutableFloatStateOf(1f) }
+    var lastSurface by remember { mutableStateOf(colorScheme.surface) }
 
     LaunchedEffect(
         colorScheme.surface,
+        darkTheme,
+        pureBlack,
         dynamicThemeAnimationStyle,
         disableAnimations,
     ) {
-        if (disableAnimations || !usesSpatialReveal) {
-            lastSurfaceColor = colorScheme.surface
-            revealOldSurface = null
-            revealProgress = 1f
+        if (disableAnimations ||
+            dynamicThemeAnimationStyle != DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER
+        ) {
+            lastSurface = colorScheme.surface
+            curtainColor = null
+            curtainProgress = 1f
             return@LaunchedEffect
         }
-        if (colorScheme.surface != lastSurfaceColor) {
-            val previous = lastSurfaceColor
-            revealOldSurface = previous
-            revealProgress = 0f
+
+        if (colorScheme.surface != lastSurface) {
+            val previous = lastSurface
+            lastSurface = colorScheme.surface
+            curtainColor = previous
+            curtainProgress = 0f
             androidx.compose.animation.core.animate(
                 initialValue = 0f,
                 targetValue = 1f,
                 animationSpec = tween(
                     durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1),
                 ),
-            ) { value, _ ->
-                revealProgress = value
-            }
-            revealProgress = 1f
-            revealOldSurface = null
+            ) { value, _ -> curtainProgress = value }
+            curtainProgress = 1f
+            curtainColor = null
         }
-        lastSurfaceColor = colorScheme.surface
     }
 
     val expressiveShapes =
@@ -282,29 +284,29 @@ fun ArchiveTuneTheme(
             )
         }
 
-        // Spatial reveal overlay: a radial gradient whose transparent
-        // center grows upward from the player position. The area outside
-        // the transparent region keeps the previous surface color, so the
-        // user sees the new theme emerging from the bottom of the screen.
-        val overlayColor = revealOldSurface
-        if (overlayColor != null && revealProgress < 1f) {
+                // Curtain overlay — paints the previous surface color at 85%
+        // opacity and cuts a growing soft transparent circle out of it.
+        // The 85% opacity keeps the UI faintly visible even at t=0, so
+        // the user never sees the screen go fully dark/blank.
+        val curtain = curtainColor
+        if (curtain != null && curtainProgress < 1f) {
             Canvas(modifier = Modifier.fillMaxSize()) {
                 val center = Offset(
                     x = size.width / 2f,
-                    y = size.height * 0.9f,
+                    y = size.height * 1.02f,
                 )
                 val maxRadius =
-                    hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.1f
-                val radius = maxRadius * (0.15f + 0.85f * revealProgress)
-                // Soft edge: gradient fades across ~35% of the circle.
-                val softness = 0.35f
+                    hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.15f
+                val radius = (maxRadius * curtainProgress).coerceAtLeast(1f)
+                val softness = 0.40f
+                val curtainWithAlpha = curtain.copy(alpha = 0.85f)
                 val brush =
                     Brush.radialGradient(
                         colorStops =
                             arrayOf(
                                 0f to Color.Transparent,
-                                (1f - softness) to Color.Transparent,
-                                1f to overlayColor,
+                                (1f - softness).coerceIn(0f, 1f) to Color.Transparent,
+                                1f to curtainWithAlpha,
                             ),
                         center = center,
                         radius = radius,

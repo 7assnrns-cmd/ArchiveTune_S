@@ -19,6 +19,7 @@ import java.time.ZoneOffset
 val DynamicThemeKey = booleanPreferencesKey("dynamicTheme")
 val DynamicThemeAnimationDurationKey = intPreferencesKey("dynamicThemeAnimationDurationMs")
 val DynamicThemeAnimationStyleKey = stringPreferencesKey("dynamicThemeAnimationStyle")
+val DynamicThemeSyncWithCrossfadeKey = booleanPreferencesKey("dynamicThemeSyncWithCrossfade")
 val CustomThemeColorKey = stringPreferencesKey("customThemeColor")
 val RandomThemeOnStartupKey = booleanPreferencesKey("randomThemeOnStartup")
 val DarkModeKey = stringPreferencesKey("darkMode")

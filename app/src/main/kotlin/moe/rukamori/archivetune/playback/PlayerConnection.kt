@@ -229,6 +229,12 @@ class PlayerConnection(
         }
 
     fun playQueue(queue: Queue) {
+        // Universal: if a song is playing and crossfade is enabled,
+        // requestCrossfadeToNewQueue tries to fade first. Otherwise
+        // fall through to the immediate path.
+        if (player.playWhenReady && player.currentMediaItem != null) {
+            if (service.requestCrossfadeToNewQueue(queue)) return
+        }
         service.playQueue(queue)
     }
 
@@ -308,6 +314,15 @@ class PlayerConnection(
             return
         }
         player.seekToNext()
+        player.prepare()
+        player.playWhenReady = true
+    }
+
+    fun seekToIndexWithCrossfade(targetIndex: Int) {
+        if (targetIndex !in 0 until player.mediaItemCount) return
+        if (targetIndex == player.currentMediaItemIndex) return
+        if (service.requestCrossfadeToIndex(targetIndex)) return
+        player.seekTo(targetIndex, 0L)
         player.prepare()
         player.playWhenReady = true
     }
