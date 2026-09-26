@@ -229,9 +229,10 @@ class PlayerConnection(
         }
 
     fun playQueue(queue: Queue) {
-        // Universal: if a song is playing and crossfade is enabled,
-        // requestCrossfadeToNewQueue tries to fade first. Otherwise
-        // fall through to the immediate path.
+        // Universal crossfade: if a track is playing and the feature is on,
+        // requestCrossfadeToNewQueue handles both the fade and the queue swap.
+        // It always falls back to service.playQueue() internally on any
+        // failure, so playback never stops.
         if (player.playWhenReady && player.currentMediaItem != null) {
             if (service.requestCrossfadeToNewQueue(queue)) return
         }
