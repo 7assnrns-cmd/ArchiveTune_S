@@ -2761,7 +2761,11 @@ class MusicService :
      * player, A fades to B, then the primary player swaps to the new
      * queue at the silence point.
      */
-    suspend fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
+    /**
+     * Universal crossfade entry point — non-suspend so PlayerConnection
+     * can call it directly. All the work runs in scope.launch.
+     */
+    fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
         if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
         if (!::player.isInitialized || !::localPlayer.isInitialized) return false
         if (player !== localPlayer) return false
@@ -2769,41 +2773,41 @@ class MusicService :
         if (player.currentMetadata?.isPodcast == true) return false
         if (isCrossfading || crossfadeHandoffInProgress) return false
 
-        val hideExplicit = dataStore.get(HideExplicitKey, false)
-        val hideVideo = dataStore.get(HideVideoKey, false)
-        val initialStatus =
-            withContext(Dispatchers.IO) {
-                queue.getInitialStatus().filterPlaybackContent(hideExplicit, hideVideo)
-            }
-        if (initialStatus.items.isEmpty()) return false
-
-        val targetIndex = initialStatus.mediaItemIndex.coerceIn(0, initialStatus.items.lastIndex)
-        val targetItem = initialStatus.items[targetIndex]
-        val targetMediaId = targetItem.mediaId.trim()
         val outgoingMediaId = player.currentMediaItem?.mediaId
-        if (targetMediaId.isEmpty()) return false
-        if (targetMediaId == outgoingMediaId) return false
-        if (targetItem.hasBlockedArtist(loadBlockedArtistIds())) return false
-        if (targetItem.metadata?.isPodcast == true) return false
-
-        // إذا كانت الأغنية موجودة في الـ queue الحالية — استخدم in-queue path
-        val existingIndex =
-            (0 until player.mediaItemCount).firstOrNull { i ->
-                val item = player.getMediaItemAt(i)
-                item.mediaId == targetMediaId || item.metadata?.id == targetMediaId
-            }
-        if (existingIndex != null && existingIndex != player.currentMediaItemIndex) {
-            if (requestCrossfadeToIndex(existingIndex)) return true
-        }
-
-        val durationMs =
-            crossfadeDurationMs.coerceAtMost(10_000L).coerceAtLeast(250L)
 
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
         crossfade2ManualJob?.cancel()
         crossfade2ManualJob =
             scope.launch {
+                val hideExplicit = dataStore.get(HideExplicitKey, false)
+                val hideVideo = dataStore.get(HideVideoKey, false)
+                val initialStatus =
+                    withContext(Dispatchers.IO) {
+                        queue.getInitialStatus().filterPlaybackContent(hideExplicit, hideVideo)
+                    }
+                if (initialStatus.items.isEmpty()) return@launch
+
+                val targetIndex = initialStatus.mediaItemIndex.coerceIn(0, initialStatus.items.lastIndex)
+                val targetItem = initialStatus.items[targetIndex]
+                val targetMediaId = targetItem.mediaId.trim()
+                if (targetMediaId.isEmpty()) return@launch
+                if (targetMediaId == outgoingMediaId) return@launch
+                if (targetItem.hasBlockedArtist(loadBlockedArtistIds())) return@launch
+                if (targetItem.metadata?.isPodcast == true) return@launch
+
+                // Try in-queue path first
+                val existingIndex =
+                    (0 until player.mediaItemCount).firstOrNull { i ->
+                        val item = player.getMediaItemAt(i)
+                        item.mediaId == targetMediaId || item.metadata?.id == targetMediaId
+                    }
+                if (existingIndex != null && existingIndex != player.currentMediaItemIndex) {
+                    if (requestCrossfadeToIndex(existingIndex)) return@launch
+                }
+
+                val durationMs = crossfadeDurationMs.coerceAtMost(10_000L).coerceAtLeast(250L)
+
                 isCrossfading = true
                 crossfadeProgress = 0f
                 crossfadeBaseVolume = currentEffectivePlayerVolume()
@@ -2814,16 +2818,9 @@ class MusicService :
 
                 var primarySwapped = false
                 try {
-                    val incomingPlayer = prepareCrossfade2Incoming(targetItem)
-                    if (incomingPlayer == null) {
-                        return@launch
-                    }
-                    if (!awaitCrossfadePlayerReady(incomingPlayer, 15_000L, 2_000L)) {
-                        return@launch
-                    }
-                    if (player.currentMediaItem?.mediaId != outgoingMediaId) {
-                        return@launch
-                    }
+                    val incomingPlayer = prepareCrossfade2Incoming(targetItem) ?: return@launch
+                    if (!awaitCrossfadePlayerReady(incomingPlayer, 15_000L, 2_000L)) return@launch
+                    if (player.currentMediaItem?.mediaId != outgoingMediaId) return@launch
 
                     incomingPlayer.playWhenReady = true
                     incomingPlayer.play()
@@ -2907,6 +2904,7 @@ class MusicService :
             }
         return true
     }
+
 
     private fun scheduleCrossfade() {
         if (!::player.isInitialized) return
@@ -3048,6 +3046,28 @@ class MusicService :
                     ?.toString()
                     ?.takeIf { it.isNotBlank() }
         return currentAlbum != null && currentAlbum == targetAlbum
+    }
+
+    /**
+     * Prepares the secondary player for a queue-swap crossfade.
+     * The incoming item is set on a fresh ExoPlayer with volume 0,
+     * ready to be faded in.
+     */
+    private fun prepareCrossfade2Incoming(mediaItem: MediaItem): ExoPlayer? {
+        releaseSecondaryCrossfadePlayer()
+        return runCatching {
+            createSecondaryCrossfadePlayer().also { secondary ->
+                secondaryCrossfadePlayer = secondary
+                secondaryCrossfadeTarget = null
+                secondary.setMediaItem(mediaItem)
+                secondary.playbackParameters = player.playbackParameters
+                secondary.volume = 0f
+                secondary.prepare()
+            }
+        }.onFailure { error ->
+            Timber.tag(TAG).w(error, "Crossfade2 incoming preparation failed")
+            releaseSecondaryCrossfadePlayer()
+        }.getOrNull()
     }
 
     private fun prepareSecondaryCrossfadePlayer(target: CrossfadeTarget): ExoPlayer? {
