@@ -2647,11 +2647,9 @@ class MusicService :
 
         val targetItem = player.getMediaItemAt(targetIndex)
         val target = CrossfadeTarget(targetIndex, targetItem.mediaId)
-        if (target.mediaId.isBlank()) return false
-        if (targetItem.metadata?.isPodcast == true) return false
+        if (target.mediaId.isBlank() || targetItem.metadata?.isPodcast == true) return false
 
-        val incomingPlayer = prepareSecondaryCrossfadePlayer(target) ?: return false
-
+        val incoming = prepareSecondaryCrossfadePlayer(target) ?: return false
         val duration = effectiveCrossfadeDuration(player.duration) ?: crossfadeDurationMs
         if (duration < MIN_CROSSFADE_DURATION_MS) {
             releaseSecondaryCrossfadePlayer()
@@ -2661,80 +2659,72 @@ class MusicService :
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
         crossfadeJob?.cancel()
-        crossfadeJob =
-            scope.launch {
-                isCrossfading = true
-                crossfadeProgress = 0f
-                crossfadeBaseVolume = player.volume
-                crossfadeIncomingBaseVolume = player.volume
-                crossfadePlaybackRequested = true
-                localPlayer.pauseAtEndOfMediaItems = false
+        crossfadeJob = scope.launch {
+            isCrossfading = true
+            crossfadeProgress = 0f
+            crossfadeBaseVolume = player.volume
+            crossfadeIncomingBaseVolume = player.volume
+            crossfadePlaybackRequested = true
+            crossfadeThemeTarget.value = targetItem.metadata
+            localPlayer.pauseAtEndOfMediaItems = false
 
-                try {
-                    val requiredBufferedMs = requiredCrossfadeStartBufferMs(duration)
-                    if (!awaitCrossfadePlayerReady(incomingPlayer, CROSSFADE_READY_TIMEOUT_MS, requiredBufferedMs)) {
-                        abortCrossfadeAndResumePrimary("manual_crossfade_secondary_not_ready")
-                        return@launch
-                    }
+            var swapped = false
+            try {
+                val need = requiredCrossfadeStartBufferMs(duration)
+                if (!awaitCrossfadePlayerReady(incoming, CROSSFADE_READY_TIMEOUT_MS, need)) {
+                    Timber.tag(TAG).w("CF-iq: secondary not ready")
+                    return@launch
+                }
+                incoming.playbackParameters = player.playbackParameters
+                incoming.playWhenReady = true
+                incoming.play()
 
-                    incomingPlayer.playbackParameters = player.playbackParameters
-                    incomingPlayer.playWhenReady = true
-                    incomingPlayer.play()
+                val s = android.os.SystemClock.elapsedRealtime()
+                while (isActive) {
+                    val el = android.os.SystemClock.elapsedRealtime() - s
+                    crossfadeProgress = (el.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                    applyCrossfadeVolumes(crossfadeProgress, crossfadeBaseVolume,
+                        crossfadeIncomingBaseVolume, localPlayer, incoming)
+                    if (crossfadeProgress >= 1f) break
+                    delay(CROSSFADE_FRAME_MS)
+                }
 
-                    val startMs = android.os.SystemClock.elapsedRealtime()
-                    while (isActive) {
-                        val elapsedMs = android.os.SystemClock.elapsedRealtime() - startMs
-                        crossfadeProgress = (elapsedMs.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
-                        applyCrossfadeVolumes(
-                            crossfadeProgress,
-                            crossfadeBaseVolume,
-                            crossfadeIncomingBaseVolume,
-                            localPlayer,
-                            incomingPlayer,
-                        )
-                        if (crossfadeProgress >= 1f) break
-                        delay(CROSSFADE_FRAME_MS)
-                    }
+                // Handoff WITHOUT pause. Silent + seek + prepare + wait.
+                localPlayer.volume = 0f
+                player.seekTo(targetIndex, incoming.currentPosition.coerceAtLeast(0L))
+                player.playWhenReady = true
+                if (player.playbackState == Player.STATE_IDLE) player.prepare()
 
-                    // Primary is silent; safely move it to the target.
-                    localPlayer.volume = 0f
-                    player.pause()
-                    player.seekTo(targetIndex, incomingPlayer.currentPosition.coerceAtLeast(0L))
-                    player.prepare()
-
-                    val handoffDeadline =
-                        android.os.SystemClock.elapsedRealtime() + CROSSFADE_HANDOFF_READY_TIMEOUT_MS
-                    while (isActive && android.os.SystemClock.elapsedRealtime() < handoffDeadline) {
-                        if (player.playbackState == Player.STATE_READY) break
-                        if (player.playbackState == Player.STATE_IDLE) player.prepare()
-                        if (player.playbackState == Player.STATE_ENDED) break
-                        delay(25L)
-                    }
-
-                    if (player.playbackState == Player.STATE_READY) {
-                        player.playWhenReady = true
-                        localPlayer.volume = crossfadeIncomingBaseVolume
-                    } else {
-                        Timber.tag(TAG).w("Manual crossfade: primary handoff failed; keeping secondary audible")
-                        incomingPlayer.volume = crossfadeIncomingBaseVolume
-                    }
-
+                val dl = android.os.SystemClock.elapsedRealtime() + 20_000L
+                while (isActive && android.os.SystemClock.elapsedRealtime() < dl) {
+                    val ps = player.playbackState
+                    if (ps == Player.STATE_READY || ps == Player.STATE_BUFFERING) { swapped = true; break }
+                    if (ps == Player.STATE_IDLE) player.prepare()
+                    if (ps == Player.STATE_ENDED) break
+                    delay(25L)
+                }
+                if (swapped) {
+                    localPlayer.volume = crossfadeIncomingBaseVolume
                     scheduleCrossfade()
-                } catch (cancellation: CancellationException) {
-                    throw cancellation
-                } catch (error: Exception) {
-                    Timber.tag(TAG).w(error, "Manual crossfade failed")
-                    abortCrossfadeAndResumePrimary("manual_crossfade_exception")
-                } finally {
-                    isCrossfading = false
-                    crossfadeProgress = 0f
-                    crossfadePlaybackRequested = false
-                    releaseSecondaryCrossfadePlayer()
-                    if (::player.isInitialized && player.volume == 0f) {
-                        localPlayer.volume = crossfadeBaseVolume
-                    }
+                } else {
+                    incoming.volume = crossfadeIncomingBaseVolume
+                    Timber.tag(TAG).w("CF-iq: primary handoff failed; secondary kept")
+                }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "CF-iq exception")
+            } finally {
+                isCrossfading = false
+                crossfadeProgress = 0f
+                crossfadePlaybackRequested = false
+                crossfadeThemeTarget.value = null
+                releaseSecondaryCrossfadePlayer()
+                if (::player.isInitialized && player.volume == 0f) {
+                    localPlayer.volume = crossfadeBaseVolume
                 }
             }
+        }
         return true
     }
 
@@ -2775,166 +2765,68 @@ class MusicService :
      * (caller should proceed with playQueueImmediate).
      */
     fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
-        if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) {
-            Timber.tag(TAG).d("CF skip: disabled enabled=%s manual=%s dur=%d",
-                crossfadeEnabled, crossfadeManualSelectionEnabled, crossfadeDurationMs)
-            return false
-        }
+        if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
         if (!::player.isInitialized || !::localPlayer.isInitialized) return false
         if (player !== localPlayer) return false
-        if (player.currentMediaItem == null || !player.playWhenReady) {
-            Timber.tag(TAG).d("CF skip: no playing track")
-            return false
-        }
+        if (player.currentMediaItem == null || !player.playWhenReady) return false
         if (player.currentMetadata?.isPodcast == true) return false
-        if (isCrossfading || crossfadeHandoffInProgress) {
-            Timber.tag(TAG).d("CF skip: fading already")
-            return false
-        }
-
-        val outgoingMediaId = player.currentMediaItem?.mediaId
-        val t0 = android.os.SystemClock.elapsedRealtime()
+        if (isCrossfading || crossfadeHandoffInProgress) return false
+        if (crossfade2ManualJob?.isActive == true) return false
 
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
-        crossfade2ManualJob?.cancel()
-        crossfade2ManualJob =
-            scope.launch {
-                var ok = false
-                try {
-                    Timber.tag(TAG).d("CF start outgoing=%s", outgoingMediaId)
-                    val hideExp = dataStore.get(HideExplicitKey, false)
-                    val hideVid = dataStore.get(HideVideoKey, false)
-                    val status = withContext(Dispatchers.IO) {
-                        queue.getInitialStatus().filterPlaybackContent(hideExp, hideVid)
-                    }
-                    if (status.items.isEmpty()) { Timber.tag(TAG).d("CF abort: empty"); return@launch }
+        crossfade2ManualJob = scope.launch {
+            var addedIndex = -1
+            try {
+                val hideExp = dataStore.get(HideExplicitKey, false)
+                val hideVid = dataStore.get(HideVideoKey, false)
+                val status = withContext(Dispatchers.IO) {
+                    queue.getInitialStatus().filterPlaybackContent(hideExp, hideVid)
+                }
+                if (status.items.isEmpty()) {
+                    playQueueImmediate(queue); return@launch
+                }
+                val item = status.items[status.mediaItemIndex.coerceIn(0, status.items.lastIndex)]
+                val tid = item.mediaId.trim()
+                if (tid.isEmpty() || tid == player.currentMediaItem?.mediaId) {
+                    playQueueImmediate(queue); return@launch
+                }
 
-                    val idx = status.mediaItemIndex.coerceIn(0, status.items.lastIndex)
-                    val item = status.items[idx]
-                    val tid = item.mediaId.trim()
-                    if (tid.isEmpty() || tid == outgoingMediaId) { Timber.tag(TAG).d("CF abort: target==outgoing"); return@launch }
-                    if (item.hasBlockedArtist(loadBlockedArtistIds())) { Timber.tag(TAG).d("CF abort: blocked"); return@launch }
-                    if (item.metadata?.isPodcast == true) { Timber.tag(TAG).d("CF abort: podcast"); return@launch }
+                // Same mechanism as in-queue click:
+                // If the target is not currently in the queue, append it,
+                // then call requestCrossfadeToIndex on that index.
+                val existing = (0 until player.mediaItemCount).firstOrNull { i ->
+                    val it = player.getMediaItemAt(i)
+                    it.mediaId == tid || it.metadata?.id == tid
+                }
+                val idx = existing ?: run {
+                    player.addMediaItem(item)
+                    addedIndex = player.mediaItemCount - 1
+                    addedIndex
+                }
 
-                    // ── in-queue fast path ──
-                    val existingIdx = (0 until player.mediaItemCount).firstOrNull { k ->
-                        val it = player.getMediaItemAt(k)
-                        it.mediaId == tid || it.metadata?.id == tid
-                    }
-                    if (existingIdx != null && existingIdx != player.currentMediaItemIndex) {
-                        Timber.tag(TAG).d("CF in-queue idx=%d", existingIdx)
-                        if (requestCrossfadeToIndex(existingIdx)) { ok = true; return@launch }
-                    }
-
-                    // ── queue swap: warm resolve cache first ──
-                    Timber.tag(TAG).d("CF warming %s", tid)
-                    val lowData = isLowDataModeActive()
-                    val warm = withContext(Dispatchers.IO) {
-                        runCatching {
-                            resolveAudioStream.resolveBlocking(
-                                AudioStreamRequest(
-                                    mediaId = tid,
-                                    quality = if (lowData) AudioQuality.LOW else audioQuality,
-                                    networkMetered = lowData,
-                                    purpose = StreamPurpose.PLAYBACK,
-                                    authState = YouTube.currentPlaybackAuthState(),
-                                    pinnedFormatId = null,
-                                ),
-                            )
-                        }
-                    }
-                    Timber.tag(TAG).d("CF warmed in %dms ok=%s",
-                        android.os.SystemClock.elapsedRealtime() - t0, warm.isSuccess)
-
-                    val durMs = crossfadeDurationMs.coerceAtMost(10_000L).coerceAtLeast(250L)
-
-                    isCrossfading = true
-                    crossfadeProgress = 0f
-                    crossfadeBaseVolume = currentEffectivePlayerVolume()
-                    crossfadeIncomingBaseVolume = currentEffectivePlayerVolumeForMediaId(tid)
-                    crossfadePlaybackRequested = true
-                    crossfadeThemeTarget.value = item.metadata
-                    localPlayer.pauseAtEndOfMediaItems = false
-
-                    val incoming = prepareCrossfade2Incoming(item)
-                    if (incoming == null) {
-                        Timber.tag(TAG).w("CF abort: prepareIncoming=null")
-                        return@launch
-                    }
-                    if (!awaitCrossfadePlayerReady(incoming, 20_000L, 1_000L)) {
-                        Timber.tag(TAG).w("CF abort: secondary not ready after %dms state=%d err=%s",
-                            android.os.SystemClock.elapsedRealtime() - t0,
-                            incoming.playbackState, incoming.playerError?.message)
-                        return@launch
-                    }
-                    if (player.currentMediaItem?.mediaId != outgoingMediaId) {
-                        Timber.tag(TAG).d("CF abort: outgoing changed")
-                        return@launch
-                    }
-
-                    Timber.tag(TAG).d("CF secondary ready after %dms, fading",
-                        android.os.SystemClock.elapsedRealtime() - t0)
-                    incoming.playWhenReady = true
-                    incoming.play()
-
-                    var swapped = false
-                    val fadeStart = android.os.SystemClock.elapsedRealtime()
-                    while (isActive) {
-                        val el = android.os.SystemClock.elapsedRealtime() - fadeStart
-                        crossfadeProgress = (el.toFloat() / durMs.toFloat()).coerceIn(0f, 1f)
-                        applyCrossfadeVolumes(crossfadeProgress, crossfadeBaseVolume,
-                            crossfadeIncomingBaseVolume, localPlayer, incoming)
-                        if (!swapped && crossfadeProgress >= 0.88f) {
-                            Timber.tag(TAG).d("CF swapping primary at %.2f", crossfadeProgress)
-                            swapped = swapPrimaryToNewQueue(
-                                items = status.items, targetIndex = idx,
-                                positionMs = incoming.currentPosition.coerceAtLeast(0L))
-                        }
-                        if (crossfadeProgress >= 1f) break
-                        delay(16L)
-                    }
-                    if (!swapped) {
-                        swapped = swapPrimaryToNewQueue(
-                            items = status.items, targetIndex = idx,
-                            positionMs = incoming.currentPosition.coerceAtLeast(0L))
-                    }
-                    if (!swapped) {
-                        Timber.tag(TAG).w("CF primary swap failed")
-                        incoming.volume = crossfadeIncomingBaseVolume
-                    }
-
+                val accepted = requestCrossfadeToIndex(idx)
+                if (accepted) {
                     currentQueue = queue
                     queueTitle = status.title
-                    suppressAutoPlayback = false
-                    clearAutomix()
-                    autoAddedMediaIds.clear()
-                    currentMediaMetadata.value = player.currentMetadata
-                    scheduleCrossfade()
-                    ok = true
-                    Timber.tag(TAG).d("CF complete in %dms",
-                        android.os.SystemClock.elapsedRealtime() - t0)
-                } catch (c: CancellationException) {
-                    throw c
-                } catch (e: Exception) {
-                    Timber.tag(TAG).w(e, "CF crashed")
-                } finally {
-                    isCrossfading = false
-                    crossfadeProgress = 0f
-                    crossfadePlaybackRequested = false
-                    crossfade2ManualJob = null
-                    crossfadeThemeTarget.value = null
-                    releaseSecondaryCrossfadePlayer()
-                    if (::player.isInitialized) {
-                        if (player.volume == 0f) localPlayer.volume = crossfadeBaseVolume
-                        if (!ok) {
-                            Timber.tag(TAG).w("CF FAILED after %dms, fallback",
-                                android.os.SystemClock.elapsedRealtime() - t0)
-                            playQueueImmediate(queue)
-                        }
+                } else {
+                    if (addedIndex in 0 until player.mediaItemCount) {
+                        player.removeMediaItem(addedIndex)
                     }
+                    playQueueImmediate(queue)
                 }
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "CF-nq failed")
+                if (addedIndex in 0 until player.mediaItemCount) {
+                    runCatching { player.removeMediaItem(addedIndex) }
+                }
+                playQueueImmediate(queue)
+            } finally {
+                crossfade2ManualJob = null
             }
+        }
         return true
     }
 

@@ -119,3 +119,4 @@ core.*
 /android_resource_cleaner.py_backups/
 .bak_fix/
 *.before_*
+_backups/

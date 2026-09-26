@@ -188,7 +188,10 @@ dynamicThemeAnimationDurationMs: Int = 800,
         }
 
     val animatedColorScheme =
-        if (disableAnimations || dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.INSTANT) {
+        if (disableAnimations ||
+            dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.INSTANT ||
+            dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER
+        ) {
             colorScheme
         } else {
             animateColorScheme(
