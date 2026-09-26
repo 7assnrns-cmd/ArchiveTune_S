@@ -1435,6 +1435,13 @@ class MusicService :
             }
 
         dataStore.data
+            .map { it[CrossfadeManualSelectionKey] ?: true }
+            .distinctUntilChanged()
+            .collectLatest(scope) { enabled ->
+                crossfadeManualSelectionEnabled = enabled
+            }
+
+        dataStore.data
             .map { it[WakelockKey] ?: false }
             .distinctUntilChanged()
             .collectLatest(scope) { enabled ->
