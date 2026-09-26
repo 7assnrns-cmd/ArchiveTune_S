@@ -1134,4 +1134,8 @@
     <string name="dynamic_theme_animation_duration_description">How long the theme takes to blend into the artwork color. 0 = instant.</string>
     <string name="dynamic_theme_animation_duration_ms">%1$d ms</string>
     <string name="dynamic_theme_animation_duration_instant">Instant</string>
+    <string name="dynamic_theme_animation_style_title">Theme transition style</string>
+    <string name="dynamic_theme_style_smooth">Smooth (crossfade colors)</string>
+    <string name="dynamic_theme_style_circle">Circle from player</string>
+    <string name="dynamic_theme_style_instant">Instant</string>
 </resources>

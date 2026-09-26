@@ -9,6 +9,12 @@
 
 package moe.rukamori.archivetune.ui.screens.settings
 
+import androidx.compose.ui.graphics.Color
+import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.ListItem
+import moe.rukamori.archivetune.ui.component.ListDialog
+import moe.rukamori.archivetune.ui.theme.DynamicThemeAnimationStyle
+import moe.rukamori.archivetune.constants.DynamicThemeAnimationStyleKey
 import moe.rukamori.archivetune.ui.component.ActionPromptDialog
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.rememberSliderState
@@ -164,6 +170,16 @@ fun AppearanceSettings(navController: NavController) {
             DynamicThemeAnimationDurationKey,
             defaultValue = 800,
         )
+
+    val (dynamicThemeAnimationStyleName, onDynamicThemeAnimationStyleChange) =
+        rememberPreference(
+            DynamicThemeAnimationStyleKey,
+            defaultValue = DynamicThemeAnimationStyle.SMOOTH.name,
+        )
+    val dynamicThemeAnimationStyle =
+        DynamicThemeAnimationStyle.fromName(dynamicThemeAnimationStyleName)
+    var showAnimationStyleDialog by remember { mutableStateOf(false) }
+
 
     val (wallpaperExtractionFailed) =
         rememberPreference(
@@ -645,6 +661,52 @@ fun AppearanceSettings(navController: NavController) {
                                 dynamicThemeAnimationDurationMs,
                             )
                         }
+
+                    if (showAnimationStyleDialog) {
+                        val options =
+                            listOf(
+                                DynamicThemeAnimationStyle.SMOOTH to
+                                    stringResource(R.string.dynamic_theme_style_smooth),
+                                DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER to
+                                    stringResource(R.string.dynamic_theme_style_circle),
+                                DynamicThemeAnimationStyle.INSTANT to
+                                    stringResource(R.string.dynamic_theme_style_instant),
+                            )
+                        ListDialog(
+                            onDismiss = { showAnimationStyleDialog = false },
+                        ) {
+                            items(options) { (style, label) ->
+                                ListItem(
+                                    headlineContent = { Text(label) },
+                                    modifier =
+                                        Modifier
+                                            .fillMaxWidth()
+                                            .clickable {
+                                                onDynamicThemeAnimationStyleChange(style.name)
+                                                showAnimationStyleDialog = false
+                                            },
+                                    colors = ListItemDefaults.colors(containerColor = Color.Transparent),
+                                )
+                            }
+                        }
+                    }
+
+                    PreferenceEntry(
+                        title = { Text(stringResource(R.string.dynamic_theme_animation_style_title)) },
+                        description =
+                            stringResource(
+                                when (dynamicThemeAnimationStyle) {
+                                    DynamicThemeAnimationStyle.SMOOTH ->
+                                        R.string.dynamic_theme_style_smooth
+                                    DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER ->
+                                        R.string.dynamic_theme_style_circle
+                                    DynamicThemeAnimationStyle.INSTANT ->
+                                        R.string.dynamic_theme_style_instant
+                                },
+                            ),
+                        icon = { Icon(painterResource(R.drawable.palette), null) },
+                        onClick = { showAnimationStyleDialog = true },
+                    )
 
                     PreferenceEntry(
                         title = { Text(stringResource(R.string.dynamic_theme_animation_duration_title)) },

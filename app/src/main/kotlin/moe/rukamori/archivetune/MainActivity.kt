@@ -206,6 +206,7 @@ import moe.rukamori.archivetune.constants.DisableAnimationsKey
 import moe.rukamori.archivetune.constants.DisableScreenshotKey
 import moe.rukamori.archivetune.constants.DynamicThemeKey
 import moe.rukamori.archivetune.constants.DynamicThemeAnimationDurationKey
+import moe.rukamori.archivetune.constants.DynamicThemeAnimationStyleKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
 import moe.rukamori.archivetune.constants.FontPreferenceKey
 import moe.rukamori.archivetune.constants.HasPressedStarKey
@@ -295,6 +296,7 @@ import moe.rukamori.archivetune.ui.screens.search.onlineSearchResultRoute
 import moe.rukamori.archivetune.ui.screens.settings.DarkMode
 import moe.rukamori.archivetune.ui.screens.settings.NavigationTab
 import moe.rukamori.archivetune.ui.theme.ArchiveTuneTheme
+import moe.rukamori.archivetune.ui.theme.DynamicThemeAnimationStyle
 import moe.rukamori.archivetune.ui.theme.ColorSaver
 import moe.rukamori.archivetune.ui.theme.DefaultThemeColor
 import moe.rukamori.archivetune.ui.theme.extractThemeColor
@@ -814,6 +816,12 @@ class MainActivity : ComponentActivity() {
                 DynamicThemeAnimationDurationKey,
                 defaultValue = 800,
             )
+            val dynamicThemeAnimationStyleName by rememberPreference(
+                DynamicThemeAnimationStyleKey,
+                defaultValue = DynamicThemeAnimationStyle.SMOOTH.name,
+            )
+            val dynamicThemeAnimationStyle =
+                DynamicThemeAnimationStyle.fromName(dynamicThemeAnimationStyleName)
             val customThemeColorValue by rememberPreference(CustomThemeColorKey, defaultValue = "default")
             val darkTheme by rememberEnumPreference(DarkModeKey, defaultValue = DarkMode.AUTO)
             val defaultDisableAnimations = remember(this@MainActivity) { applicationContext.isLowRamDevice() }
@@ -930,6 +938,7 @@ class MainActivity : ComponentActivity() {
                 fontPreference = fontPreference,
                 customFontUri = customFontUri,
                 dynamicThemeAnimationDurationMs = dynamicThemeAnimationDurationMs,
+                dynamicThemeAnimationStyle = dynamicThemeAnimationStyle,
             ) {
                 val navController = rememberNavController()
                 val onboardingViewModel: OnboardingViewModel = hiltViewModel()

@@ -1105,4 +1105,8 @@
     <string name="dynamic_theme_animation_duration_description">كم يستغرق الثيم للانتقال إلى لون الأغنية. 0 = فوري.</string>
     <string name="dynamic_theme_animation_duration_ms">%1$d مللي ثانية</string>
     <string name="dynamic_theme_animation_duration_instant">فوري</string>
+    <string name="dynamic_theme_animation_style_title">نمط انتقال الثيم</string>
+    <string name="dynamic_theme_style_smooth">سلس (خلط الألوان)</string>
+    <string name="dynamic_theme_style_circle">دائرة من المشغل</string>
+    <string name="dynamic_theme_style_instant">فوري</string>
 </resources>

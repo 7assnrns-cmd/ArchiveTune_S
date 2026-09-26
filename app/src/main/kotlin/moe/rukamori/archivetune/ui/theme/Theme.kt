@@ -7,6 +7,19 @@
 
 package moe.rukamori.archivetune.ui.theme
 
+import kotlin.math.hypot
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.Modifier
+import androidx.compose.animation.core.animate
+import androidx.compose.runtime.setValue
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.Canvas
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
@@ -74,6 +87,19 @@ data class ThemeSeedPalette(
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
 @Composable
+
+enum class DynamicThemeAnimationStyle {
+    SMOOTH,
+    CIRCLE_FROM_PLAYER,
+    INSTANT,
+    ;
+
+    companion object {
+        fun fromName(name: String?): DynamicThemeAnimationStyle =
+            entries.firstOrNull { it.name == name } ?: SMOOTH
+    }
+}
+
 fun ArchiveTuneTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureBlack: Boolean = false,
@@ -83,6 +109,7 @@ fun ArchiveTuneTheme(
     fontPreference: AppFontPreference = AppFontPreference.DEFAULT,
     customFontUri: String = "",
     dynamicThemeAnimationDurationMs: Int = 800,
+    dynamicThemeAnimationStyle: DynamicThemeAnimationStyle = DynamicThemeAnimationStyle.SMOOTH,
     content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
@@ -167,8 +194,13 @@ fun ArchiveTuneTheme(
             }
         }
 
+    val usesSpatialReveal = dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER
+
     val animatedColorScheme =
-        if (disableAnimations) {
+        if (disableAnimations || usesSpatialReveal) {
+            // In spatial reveal mode the theme switches instantly and the
+            // visual transition is driven entirely by the reveal overlay, so
+            // there is no color interpolation here.
             colorScheme
         } else {
             animateColorScheme(
@@ -176,6 +208,45 @@ fun ArchiveTuneTheme(
                 animationSpec = dynamicThemeSpec,
             )
         }
+
+    // ── Spatial reveal state ────────────────────────────────────────
+    // The overlay paints the previous surface color in a radial gradient
+    // whose transparent center grows from the player position upward.
+    // No screenshot is taken: the theme underneath flips instantly, and
+    // the overlay softly retracts to reveal it.
+    var revealOldSurface by remember { mutableStateOf<Color?>(null) }
+    var revealProgress by remember { mutableFloatStateOf(1f) }
+    var lastSurfaceColor by remember { mutableStateOf(colorScheme.surface) }
+
+    LaunchedEffect(
+        colorScheme.surface,
+        dynamicThemeAnimationStyle,
+        disableAnimations,
+    ) {
+        if (disableAnimations || !usesSpatialReveal) {
+            lastSurfaceColor = colorScheme.surface
+            revealOldSurface = null
+            revealProgress = 1f
+            return@LaunchedEffect
+        }
+        if (colorScheme.surface != lastSurfaceColor) {
+            val previous = lastSurfaceColor
+            revealOldSurface = previous
+            revealProgress = 0f
+            androidx.compose.animation.core.animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1),
+                ),
+            ) { value, _ ->
+                revealProgress = value
+            }
+            revealProgress = 1f
+            revealOldSurface = null
+        }
+        lastSurfaceColor = colorScheme.surface
+    }
 
     val expressiveShapes =
         remember {
@@ -198,17 +269,50 @@ fun ArchiveTuneTheme(
             )
         }
 
-    CompositionLocalProvider(
-        LocalArchiveTuneFontPreference provides fontPreference,
-        LocalArchiveTuneFontFamily provides resolvedFontFamily,
-    ) {
-        MaterialExpressiveTheme(
-            colorScheme = animatedColorScheme,
-            motionScheme = motionScheme,
-            typography = typography,
-            shapes = expressiveShapes,
-            content = content,
-        )
+    Box(modifier = Modifier.fillMaxSize()) {
+        CompositionLocalProvider(
+            LocalArchiveTuneFontPreference provides fontPreference,
+            LocalArchiveTuneFontFamily provides resolvedFontFamily,
+        ) {
+            MaterialExpressiveTheme(
+                colorScheme = animatedColorScheme,
+                motionScheme = motionScheme,
+                typography = typography,
+                shapes = expressiveShapes,
+                content = content,
+            )
+        }
+
+        // Spatial reveal overlay: a radial gradient whose transparent
+        // center grows upward from the player position. The area outside
+        // the transparent region keeps the previous surface color, so the
+        // user sees the new theme emerging from the bottom of the screen.
+        val overlayColor = revealOldSurface
+        if (overlayColor != null && revealProgress < 1f) {
+            Canvas(modifier = Modifier.fillMaxSize()) {
+                val center = Offset(
+                    x = size.width / 2f,
+                    y = size.height * 0.9f,
+                )
+                val maxRadius =
+                    hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.1f
+                val radius = maxRadius * (0.15f + 0.85f * revealProgress)
+                // Soft edge: gradient fades across ~35% of the circle.
+                val softness = 0.35f
+                val brush =
+                    Brush.radialGradient(
+                        colorStops =
+                            arrayOf(
+                                0f to Color.Transparent,
+                                (1f - softness) to Color.Transparent,
+                                1f to overlayColor,
+                            ),
+                        center = center,
+                        radius = radius,
+                    )
+                drawRect(brush = brush, size = size)
+            }
+        }
     }
 }
 
