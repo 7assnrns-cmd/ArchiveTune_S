@@ -7,19 +7,6 @@
 
 package moe.rukamori.archivetune.ui.theme
 
-import kotlin.math.hypot
-import androidx.compose.ui.graphics.Brush
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.Modifier
-import androidx.compose.animation.core.animate
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.mutableFloatStateOf
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.Canvas
 import android.app.WallpaperManager
 import android.content.Context
 import android.graphics.Bitmap
@@ -28,7 +15,6 @@ import android.os.Build
 import android.util.Base64
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.FiniteAnimationSpec
-import androidx.compose.animation.core.tween
 import androidx.compose.animation.core.snap
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.ColorScheme
@@ -64,6 +50,18 @@ import kotlinx.serialization.json.jsonPrimitive
 import moe.rukamori.archivetune.constants.AppFontPreference
 import kotlin.math.abs
 import kotlin.math.min
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.animation.core.animate
+import androidx.compose.animation.core.tween
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
+import kotlin.math.hypot
 
 val DefaultThemeColor = Color(0xFFED5564)
 val LocalArchiveTuneFontPreference = staticCompositionLocalOf { AppFontPreference.DEFAULT }
@@ -86,6 +84,7 @@ data class ThemeSeedPalette(
 )
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
+@Composable
 enum class DynamicThemeAnimationStyle {
     SMOOTH,
     CIRCLE_FROM_PLAYER,
@@ -98,7 +97,6 @@ enum class DynamicThemeAnimationStyle {
     }
 }
 
-@Composable
 fun ArchiveTuneTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureBlack: Boolean = false,
@@ -107,10 +105,10 @@ fun ArchiveTuneTheme(
     disableAnimations: Boolean = false,
     fontPreference: AppFontPreference = AppFontPreference.DEFAULT,
     customFontUri: String = "",
-    dynamicThemeAnimationDurationMs: Int = 800,
+dynamicThemeAnimationDurationMs: Int = 800,
     dynamicThemeAnimationStyle: DynamicThemeAnimationStyle = DynamicThemeAnimationStyle.SMOOTH,
     dynamicThemeSyncWithCrossfade: Boolean = false,
-    content: @Composable () -> Unit,
+        content: @Composable () -> Unit,
 ) {
     val context = LocalContext.current
     val useSystemDynamicColor =
@@ -183,25 +181,12 @@ fun ArchiveTuneTheme(
             if (darkTheme && pureBlack) baseColorScheme.pureBlack(true) else baseColorScheme
         }
 
-    // Dynamic theme animation duration is user-configurable.
-    // 0 ms → snap directly to the new palette (no interpolation).
     val dynamicThemeSpec: FiniteAnimationSpec<Color> =
         remember(dynamicThemeAnimationDurationMs) {
-            if (dynamicThemeAnimationDurationMs <= 0) {
-                snap()
-            } else {
-                tween(durationMillis = dynamicThemeAnimationDurationMs)
-            }
+            if (dynamicThemeAnimationDurationMs <= 0) snap()
+            else tween(durationMillis = dynamicThemeAnimationDurationMs)
         }
 
-    // ── Theme animation ─────────────────────────────────────────
-    //
-    // Smooth:           all colors interpolate together (default)
-    // Circle from player: the previous surface color is painted as a
-    //                     semi-transparent curtain; a soft transparent
-    //                     circle grows from the bottom of the screen to
-    //                     reveal the smoothly interpolating theme.
-    // Instant:          no animation at all.
     val animatedColorScheme =
         if (disableAnimations || dynamicThemeAnimationStyle == DynamicThemeAnimationStyle.INSTANT) {
             colorScheme
@@ -215,62 +200,35 @@ fun ArchiveTuneTheme(
     var circlePreviousSurface by remember { mutableStateOf<Color?>(null) }
     var circleTargetSurface by remember { mutableStateOf<Color?>(null) }
     var circleProgress by remember { mutableFloatStateOf(1f) }
-    var lastSurface by remember { mutableStateOf(colorScheme.surface) }
+    var lastCircleSurface by remember { mutableStateOf(colorScheme.surface) }
 
-    LaunchedEffect(
-        colorScheme.surface,
-        darkTheme,
-        pureBlack,
-        dynamicThemeAnimationStyle,
-        disableAnimations,
-    ) {
+    LaunchedEffect(colorScheme.surface, darkTheme, pureBlack, dynamicThemeAnimationStyle, disableAnimations) {
         if (disableAnimations ||
             dynamicThemeAnimationStyle != DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER
         ) {
-            lastSurface = colorScheme.surface
+            lastCircleSurface = colorScheme.surface
             circlePreviousSurface = null
             circleTargetSurface = null
             circleProgress = 1f
             return@LaunchedEffect
         }
-        if (colorScheme.surface != lastSurface) {
-            val prev = lastSurface
+        if (colorScheme.surface != lastCircleSurface) {
+            val prev = lastCircleSurface
             val target = colorScheme.surface
-            lastSurface = target
+            lastCircleSurface = target
             circlePreviousSurface = prev
             circleTargetSurface = target
             circleProgress = 0f
-            androidx.compose.animation.core.animate(
+            animate(
                 initialValue = 0f,
                 targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1),
-                ),
-            ) { value, _ -> circleProgress = value }
+                animationSpec = tween(durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1)),
+            ) { v, _ -> circleProgress = v }
             circleProgress = 1f
             circlePreviousSurface = null
             circleTargetSurface = null
         }
     }
-        if (colorScheme.surface != lastSurface) {
-            val previous = lastSurface
-            lastSurface = colorScheme.surface
-            circlePreviousSurface = previous
-            circleTargetSurface = colorScheme.surface
-            circleProgress = 0f
-            androidx.compose.animation.core.animate(
-                initialValue = 0f,
-                targetValue = 1f,
-                animationSpec = tween(
-                    durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1),
-                ),
-            ) { value, _ -> circleProgress = value }
-            circleProgress = 1f
-            circlePreviousSurface = null
-            circleTargetSurface = null
-        }
-    }
-
     val expressiveShapes =
         remember {
             Shapes(
@@ -292,49 +250,17 @@ fun ArchiveTuneTheme(
             )
         }
 
-    Box(modifier = Modifier.fillMaxSize()) {
-        CompositionLocalProvider(
-            LocalArchiveTuneFontPreference provides fontPreference,
-            LocalArchiveTuneFontFamily provides resolvedFontFamily,
-        ) {
-            MaterialExpressiveTheme(
-                colorScheme = animatedColorScheme,
-                motionScheme = motionScheme,
-                typography = typography,
-                shapes = expressiveShapes,
-                content = content,
-            )
-        }
-
-                // Curtain overlay — paints the previous surface color at 85%
-        // opacity and cuts a growing soft transparent circle out of it.
-        // The 85% opacity keeps the UI faintly visible even at t=0, so
-        // the user never sees the screen go fully dark/blank.
-        val prevSurface = circlePreviousSurface
-        val targetSurface = circleTargetSurface
-        if (prevSurface != null && targetSurface != null && circleProgress < 1f) {
-            Canvas(modifier = Modifier.fillMaxSize()) {
-                val centerX = size.width / 2f
-                val centerY = size.height * 1.05f
-                val maxRadius =
-                    hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.15f
-                val radius = (maxRadius * circleProgress).coerceAtLeast(1f)
-                val softness = 0.55f
-                val innerStop = (1f - softness).coerceIn(0f, 1f)
-                val brush =
-                    Brush.radialGradient(
-                        colorStops =
-                            arrayOf(
-                                0f to targetSurface,
-                                innerStop to targetSurface,
-                                1f to prevSurface,
-                            ),
-                        center = Offset(centerX, centerY),
-                        radius = radius,
-                    )
-                drawRect(brush = brush, size = size)
-            }
-        }
+    CompositionLocalProvider(
+        LocalArchiveTuneFontPreference provides fontPreference,
+        LocalArchiveTuneFontFamily provides resolvedFontFamily,
+    ) {
+        MaterialExpressiveTheme(
+            colorScheme = animatedColorScheme,
+            motionScheme = motionScheme,
+            typography = typography,
+            shapes = expressiveShapes,
+            content = content,
+        )
     }
 }
 
