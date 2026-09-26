@@ -675,7 +675,9 @@ fun AppearanceSettings(navController: NavController) {
                         ListDialog(
                             onDismiss = { showAnimationStyleDialog = false },
                         ) {
-                            items(options) { (style, label) ->
+                            items(options.size) { index ->
+                                val style = options[index].first
+                                val label = options[index].second
                                 ListItem(
                                     headlineContent = { Text(label) },
                                     modifier =

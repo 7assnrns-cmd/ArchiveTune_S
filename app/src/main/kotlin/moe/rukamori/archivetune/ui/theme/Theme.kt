@@ -86,8 +86,6 @@ data class ThemeSeedPalette(
 )
 
 @OptIn(ExperimentalMaterial3ExpressiveApi::class)
-@Composable
-
 enum class DynamicThemeAnimationStyle {
     SMOOTH,
     CIRCLE_FROM_PLAYER,
@@ -100,6 +98,7 @@ enum class DynamicThemeAnimationStyle {
     }
 }
 
+@Composable
 fun ArchiveTuneTheme(
     darkTheme: Boolean = isSystemInDarkTheme(),
     pureBlack: Boolean = false,
