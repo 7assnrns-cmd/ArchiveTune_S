@@ -62,6 +62,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.graphics.Brush
 import kotlin.math.hypot
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 
 val DefaultThemeColor = Color(0xFFED5564)
 val LocalArchiveTuneFontPreference = staticCompositionLocalOf { AppFontPreference.DEFAULT }
