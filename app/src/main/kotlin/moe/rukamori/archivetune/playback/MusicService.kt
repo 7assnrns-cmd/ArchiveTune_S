@@ -4346,11 +4346,24 @@ class MusicService :
             }
         }
     }
-
     fun playQueue(
         queue: Queue,
         playWhenReady: Boolean = true,
     ) {
+        // Universal crossfade: if a track is playing and the feature is on,
+        // requestCrossfadeToNewQueue handles the transition. It has an
+        // internal fallback to playQueueImmediate, so playback never stops.
+        if (playWhenReady && player.playWhenReady && player.currentMediaItem != null) {
+            if (requestCrossfadeToNewQueue(queue)) return
+        }
+        playQueueImmediate(queue, playWhenReady)
+    }
+
+    private fun playQueueImmediate(
+        queue: Queue,
+        playWhenReady: Boolean = true,
+    ) {
+
         val joined = togetherSessionState.value as? moe.rukamori.archivetune.together.TogetherSessionState.Joined
         if (!isTogetherApplyingRemote() && joined?.role is moe.rukamori.archivetune.together.TogetherRole.Guest) {
             if (!joined.roomState.settings.allowGuestsToControlPlayback) {
