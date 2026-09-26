@@ -212,8 +212,9 @@ fun ArchiveTuneTheme(
             )
         }
 
-    var curtainColor by remember { mutableStateOf<Color?>(null) }
-    var curtainProgress by remember { mutableFloatStateOf(1f) }
+    var circlePreviousSurface by remember { mutableStateOf<Color?>(null) }
+    var circleTargetSurface by remember { mutableStateOf<Color?>(null) }
+    var circleProgress by remember { mutableFloatStateOf(1f) }
     var lastSurface by remember { mutableStateOf(colorScheme.surface) }
 
     LaunchedEffect(
@@ -227,11 +228,30 @@ fun ArchiveTuneTheme(
             dynamicThemeAnimationStyle != DynamicThemeAnimationStyle.CIRCLE_FROM_PLAYER
         ) {
             lastSurface = colorScheme.surface
-            curtainColor = null
-            curtainProgress = 1f
+            circlePreviousSurface = null
+            circleTargetSurface = null
+            circleProgress = 1f
             return@LaunchedEffect
         }
-
+        if (colorScheme.surface != lastSurface) {
+            val prev = lastSurface
+            val target = colorScheme.surface
+            lastSurface = target
+            circlePreviousSurface = prev
+            circleTargetSurface = target
+            circleProgress = 0f
+            androidx.compose.animation.core.animate(
+                initialValue = 0f,
+                targetValue = 1f,
+                animationSpec = tween(
+                    durationMillis = dynamicThemeAnimationDurationMs.coerceAtLeast(1),
+                ),
+            ) { value, _ -> circleProgress = value }
+            circleProgress = 1f
+            circlePreviousSurface = null
+            circleTargetSurface = null
+        }
+    }
         if (colorScheme.surface != lastSurface) {
             val previous = lastSurface
             lastSurface = colorScheme.surface
@@ -288,27 +308,26 @@ fun ArchiveTuneTheme(
         // opacity and cuts a growing soft transparent circle out of it.
         // The 85% opacity keeps the UI faintly visible even at t=0, so
         // the user never sees the screen go fully dark/blank.
-        val curtain = curtainColor
-        if (curtain != null && curtainProgress < 1f) {
+        val prevSurface = circlePreviousSurface
+        val targetSurface = circleTargetSurface
+        if (prevSurface != null && targetSurface != null && circleProgress < 1f) {
             Canvas(modifier = Modifier.fillMaxSize()) {
-                val center = Offset(
-                    x = size.width / 2f,
-                    y = size.height * 1.02f,
-                )
+                val centerX = size.width / 2f
+                val centerY = size.height * 1.05f
                 val maxRadius =
                     hypot(size.width.toDouble(), size.height.toDouble()).toFloat() * 1.15f
-                val radius = (maxRadius * curtainProgress).coerceAtLeast(1f)
-                val softness = 0.40f
-                val curtainWithAlpha = curtain.copy(alpha = 0.85f)
+                val radius = (maxRadius * circleProgress).coerceAtLeast(1f)
+                val softness = 0.55f
+                val innerStop = (1f - softness).coerceIn(0f, 1f)
                 val brush =
                     Brush.radialGradient(
                         colorStops =
                             arrayOf(
-                                0f to Color.Transparent,
-                                (1f - softness).coerceIn(0f, 1f) to Color.Transparent,
-                                1f to curtainWithAlpha,
+                                0f to targetSurface,
+                                innerStop to targetSurface,
+                                1f to prevSurface,
                             ),
-                        center = center,
+                        center = Offset(centerX, centerY),
                         radius = radius,
                     )
                 drawRect(brush = brush, size = size)
