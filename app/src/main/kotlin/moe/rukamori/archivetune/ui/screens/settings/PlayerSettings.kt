@@ -259,12 +259,6 @@ fun PlayerSettings(navController: NavController) {
             defaultValue = false,
         )
     var showArtistSeparatorsDialog by remember { mutableStateOf(false) }
-
-    val (crossfadeManualSelection, onCrossfadeManualSelectionChange) =
-        rememberPreference(
-            CrossfadeManualSelectionKey,
-            defaultValue = true,
-        )
     var showExternalDownloaderPackageDialog by remember { mutableStateOf(false) }
 
     if (showArtistSeparatorsDialog) {

@@ -2737,15 +2737,6 @@ class MusicService :
         if (prev == C.INDEX_UNSET) return false
         return requestCrossfadeToIndex(prev)
     }
-
-
-        dataStore.data
-            .map { it[CrossfadeManualSelectionKey] ?: true }
-            .distinctUntilChanged()
-            .collectLatest(scope) { enabled ->
-                crossfadeManualSelectionEnabled = enabled
-            }
-
     private fun scheduleCrossfade() {
         if (!::player.isInitialized) return
         crossfadeTriggerJob?.cancel()
