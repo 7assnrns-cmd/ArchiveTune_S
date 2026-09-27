@@ -2739,8 +2739,8 @@ class MusicService :
                     localPlayer.volume = crossfadeIncomingBaseVolume
                     scheduleCrossfade()
                 } else {
-                    incoming.volume = crossfadeIncomingBaseVolume
-                    Timber.tag(TAG).w("CF-iq: primary handoff failed; secondary kept")
+                    Timber.tag(TAG).w("CF-iq: primary handoff failed; falling back to primary playback")
+                    abortCrossfadeAndResumePrimary("primary_handoff_failed")
                 }
             } catch (c: CancellationException) {
                 throw c
