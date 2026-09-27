@@ -2636,18 +2636,50 @@ class MusicService :
     // can be reused without waiting for end of track.
 
     fun requestCrossfadeToIndex(targetIndex: Int): Boolean {
-        if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
-        if (!::player.isInitialized) return false
-        if (isCrossfading || secondaryCrossfadePlayer != null) return false
-        if (!player.playWhenReady) return false
-        if (player.currentMediaItem == null) return false
-        if (player.currentMetadata?.isPodcast == true) return false
-        if (targetIndex !in 0 until player.mediaItemCount) return false
-        if (targetIndex == player.currentMediaItemIndex) return false
+        if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) {
+            Timber.tag(TAG).d("CF-iq rejected: disabled enabled=%s manual=%s dur=%s",
+                crossfadeEnabled, crossfadeManualSelectionEnabled, crossfadeDurationMs)
+            return false
+        }
+        if (!::player.isInitialized) {
+            Timber.tag(TAG).d("CF-iq rejected: player not initialized")
+            return false
+        }
+        if (isCrossfading) {
+            Timber.tag(TAG).d("CF-iq rejected: already crossfading")
+            return false
+        }
+        if (!player.playWhenReady) {
+            Timber.tag(TAG).d("CF-iq rejected: playWhenReady=false")
+            return false
+        }
+        if (player.currentMediaItem == null) {
+            Timber.tag(TAG).d("CF-iq rejected: currentMediaItem=null")
+            return false
+        }
+        if (player.currentMetadata?.isPodcast == true) {
+            Timber.tag(TAG).d("CF-iq rejected: current is podcast")
+            return false
+        }
+        if (targetIndex !in 0 until player.mediaItemCount) {
+            Timber.tag(TAG).d("CF-iq rejected: bad targetIndex=%s count=%s",
+                targetIndex, player.mediaItemCount)
+            return false
+        }
+        if (targetIndex == player.currentMediaItemIndex) {
+            Timber.tag(TAG).d("CF-iq rejected: target==current index=%s", targetIndex)
+            return false
+        }
 
         val targetItem = player.getMediaItemAt(targetIndex)
         val target = CrossfadeTarget(targetIndex, targetItem.mediaId)
-        if (target.mediaId.isBlank() || targetItem.metadata?.isPodcast == true) return false
+        if (target.mediaId.isBlank() || targetItem.metadata?.isPodcast == true) {
+            Timber.tag(TAG).d("CF-iq rejected: bad target mediaId=%s", target.mediaId)
+            return false
+        }
+        Timber.tag(TAG).d("CF-iq accepted index=%s current=%s count=%s secondary=%s",
+            targetIndex, player.currentMediaItemIndex, player.mediaItemCount,
+            secondaryCrossfadePlayer != null)
 
         val incoming = prepareSecondaryCrossfadePlayer(target) ?: return false
         val duration = effectiveCrossfadeDuration(player.duration) ?: crossfadeDurationMs
@@ -2765,6 +2797,14 @@ class MusicService :
      * (caller should proceed with playQueueImmediate).
      */
     fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
+        Timber.tag(TAG).d(
+            "CF-nq request: enabled=%s manual=%s dur=%s init=%s local=%s current=%s playing=%s fading=%s handoff=%s job=%s",
+            crossfadeEnabled, crossfadeManualSelectionEnabled, crossfadeDurationMs,
+            ::player.isInitialized, ::localPlayer.isInitialized,
+            player.currentMediaItem?.mediaId, player.playWhenReady,
+            isCrossfading, crossfadeHandoffInProgress,
+            crossfade2ManualJob?.isActive,
+        )
         if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
         if (!::player.isInitialized || !::localPlayer.isInitialized) return false
         if (player !== localPlayer) return false
@@ -2802,10 +2842,14 @@ class MusicService :
                 val idx = existing ?: run {
                     player.addMediaItem(item)
                     addedIndex = player.mediaItemCount - 1
+                    Timber.tag(TAG).d("CF-nq appended target=%s count=%s idx=%s",
+                        item.mediaId, player.mediaItemCount, addedIndex)
                     addedIndex
                 }
 
                 val accepted = requestCrossfadeToIndex(idx)
+                Timber.tag(TAG).d("CF-nq result=%s idx=%s count=%s secondary=%s",
+                    accepted, idx, player.mediaItemCount, secondaryCrossfadePlayer != null)
                 if (accepted) {
                     currentQueue = queue
                     queueTitle = status.title
@@ -7448,7 +7492,10 @@ class MusicService :
                 }
             }
         }
-        if (events.contains(EVENT_TIMELINE_CHANGED) && !isCrossfading) {
+        if (events.contains(EVENT_TIMELINE_CHANGED) &&
+            !isCrossfading &&
+            crossfade2ManualJob?.isActive != true
+        ) {
             scheduleCrossfade()
         }
 
