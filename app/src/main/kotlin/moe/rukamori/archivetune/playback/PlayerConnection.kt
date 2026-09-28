@@ -229,13 +229,13 @@ class PlayerConnection(
         }
 
     fun playQueue(queue: Queue) {
-        // Universal crossfade: if a track is playing and the feature is on,
-        // requestCrossfadeToNewQueue handles both the fade and the queue swap.
-        // It always falls back to service.playQueue() internally on any
-        // failure, so playback never stops.
-        if (player.playWhenReady && player.currentMediaItem != null) {
-            if (service.requestCrossfadeToNewQueue(queue)) return
-        }
+        // Snapshot crossfade handles ALL manual song changes uniformly:
+        // the currently playing item is captured in a temporary player,
+        // then playQueueImmediate runs normally, then we fade from the
+        // snapshot to the new primary. This works identically for
+        // Queue taps, Library taps, Search taps, Next/Prev, and any
+        // other entry point that calls playQueue().
+        if (service.requestSnapshotCrossfade(queue)) return
         service.playQueue(queue)
     }
 

@@ -523,6 +523,7 @@ class MusicService :
     private var pendingCrossfadeQueueSwap: PendingCrossfadeQueueSwap? = null
     private var crossfadeJob: Job? = null
     private var secondaryCrossfadePlayer: ExoPlayer? = null
+    private var snapshotCrossfadePlayer: ExoPlayer? = null
     private var secondaryCrossfadeTarget: CrossfadeTarget? = null
     private var isCrossfading = false
     private var crossfadeHandoffInProgress = false
@@ -2949,6 +2950,118 @@ private data class PendingCrossfadeQueueSwap(
         }
     }
 
+
+    /**
+     * Snapshot crossfade — the *correct* way to crossfade user-initiated
+     * song changes without fighting the Media3 playlist.
+     *
+     * 1. Capture the currently playing item + position + volume.
+     * 2. Spin up a temporary ExoPlayer that plays that same snapshot.
+     * 3. Wait for the snapshot to be READY (audio still coming from
+     *    primary, no gap).
+     * 4. Mute the primary and let it swap to the new queue via
+     *    playQueueImmediate().
+     * 5. Fade from snapshot → primary over crossfadeDurationMs.
+     * 6. Release snapshot.
+     *
+     * Returns true if the crossfade was accepted, false if the caller
+     * should just call playQueue() directly.
+     */
+    fun requestSnapshotCrossfade(queue: Queue): Boolean {
+        if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
+        if (!::player.isInitialized || !::localPlayer.isInitialized) return false
+        if (player !== localPlayer) return false
+        if (player.currentMediaItem == null || !player.playWhenReady) return false
+        if (player.currentMetadata?.isPodcast == true) return false
+        if (isCrossfading || crossfadeHandoffInProgress) return false
+        if (snapshotCrossfadePlayer != null) return false
+
+        val snapshotItem = player.currentMediaItem ?: return false
+        val snapshotPos = player.currentPosition.coerceAtLeast(0L)
+        val snapshotVol = player.volume.takeIf { it.isFinite() && it > 0.001f } ?: 1f
+
+        val snapshot = runCatching {
+            createSecondaryCrossfadePlayer().also {
+                it.setMediaItem(snapshotItem)
+                it.seekTo(snapshotPos)
+                it.volume = 0f
+                it.playWhenReady = true
+                it.prepare()
+            }
+        }.onFailure { err ->
+            Timber.tag(TAG).w(err, "Snapshot player creation failed")
+        }.getOrNull() ?: return false
+
+        snapshotCrossfadePlayer = snapshot
+
+        scope.launch(SilentHandler) {
+            val startTs = android.os.SystemClock.elapsedRealtime()
+            try {
+                // ── Wait for snapshot READY (no gap: primary still audible)
+                val dl1 = android.os.SystemClock.elapsedRealtime() + 5_000L
+                while (isActive && snapshot.playbackState != Player.STATE_READY) {
+                    if (snapshot.playerError != null) {
+                        Timber.tag(TAG).w("Snapshot player error: %s", snapshot.playerError?.message)
+                        throw IllegalStateException("snapshot player error")
+                    }
+                    if (android.os.SystemClock.elapsedRealtime() > dl1) {
+                        Timber.tag(TAG).w("Snapshot not ready within 5s")
+                        throw IllegalStateException("snapshot timeout")
+                    }
+                    kotlinx.coroutines.delay(25L)
+                }
+
+                // ── Mute primary, then swap queue (this is the moment the
+                //    old song would normally cut). The snapshot keeps
+                //    playing, so the user hears no gap.
+                localPlayer.volume = 0f
+                playQueueImmediate(queue)
+                localPlayer.volume = 0f
+
+                // ── Wait for primary to become playable.
+                val dl2 = android.os.SystemClock.elapsedRealtime() + 5_000L
+                while (isActive) {
+                    val ps = player.playbackState
+                    if (ps == Player.STATE_READY || ps == Player.STATE_BUFFERING) break
+                    if (android.os.SystemClock.elapsedRealtime() > dl2) break
+                    kotlinx.coroutines.delay(25L)
+                }
+
+                // ── Crossfade snapshot → primary.
+                val duration = crossfadeDurationMs.coerceAtLeast(250L)
+                val fadeStart = android.os.SystemClock.elapsedRealtime()
+                while (isActive) {
+                    val el = android.os.SystemClock.elapsedRealtime() - fadeStart
+                    val progress = (el.toFloat() / duration.toFloat()).coerceIn(0f, 1f)
+                    snapshot.volume = (snapshotVol * (1f - progress)).coerceIn(0f, 1f)
+                    localPlayer.volume = (snapshotVol * progress).coerceIn(0f, 1f)
+                    if (progress >= 1f) break
+                    kotlinx.coroutines.delay(16L)
+                }
+                localPlayer.volume = snapshotVol
+                Timber.tag(TAG).d(
+                    "Snapshot crossfade done in %dms",
+                    android.os.SystemClock.elapsedRealtime() - startTs,
+                )
+            } catch (c: CancellationException) {
+                throw c
+            } catch (e: Exception) {
+                Timber.tag(TAG).w(e, "Snapshot crossfade aborted, falling back")
+                // The snapshot may not have become ready — ensure the new
+                // queue still plays (already did playQueueImmediate above).
+                if (::player.isInitialized) {
+                    localPlayer.volume = snapshotVol
+                }
+            } finally {
+                runCatching { snapshot.release() }
+                snapshotCrossfadePlayer = null
+                if (::player.isInitialized && localPlayer.volume == 0f) {
+                    localPlayer.volume = snapshotVol
+                }
+            }
+        }
+        return true
+    }
 
     private fun scheduleCrossfade() {
         if (!::player.isInitialized) return
@@ -8758,6 +8871,8 @@ private data class PendingCrossfadeQueueSwap(
         } catch (_: Exception) {
         }
         abandonAudioFocus()
+        runCatching { snapshotCrossfadePlayer?.release() }
+        snapshotCrossfadePlayer = null
         try {
             releaseAudioEffects()
         } catch (_: Exception) {
