@@ -520,6 +520,7 @@ class MusicService :
     private var crossfadeManualSelectionEnabled = true
     private var crossfadeTriggerJob: Job? = null
     private var crossfade2ManualJob: Job? = null
+    private var pendingCrossfadeQueueSwap: PendingCrossfadeQueueSwap? = null
     private var crossfadeJob: Job? = null
     private var secondaryCrossfadePlayer: ExoPlayer? = null
     private var secondaryCrossfadeTarget: CrossfadeTarget? = null
@@ -540,6 +541,14 @@ class MusicService :
                 }
             }
         }
+private data class PendingCrossfadeQueueSwap(
+        val queue: Queue,
+        val items: List<MediaItem>,
+        val targetIndex: Int,
+        val targetMediaId: String,
+        val title: String?,
+    )
+
 
     private data class CrossfadeConfig(
         val enabled: Boolean,
@@ -2752,7 +2761,19 @@ class MusicService :
                 crossfadePlaybackRequested = false
                 crossfadeThemeTarget.value = null
                 releaseSecondaryCrossfadePlayer()
-                if (::player.isInitialized && player.volume == 0f) {
+                pendingCrossfadeQueueSwap?.let { swap ->
+                        pendingCrossfadeQueueSwap = null
+                        if (::player.isInitialized) {
+                            val safeIdx = swap.targetIndex.coerceIn(0, swap.items.lastIndex)
+                            val pos = player.currentPosition.coerceAtLeast(0L)
+                            player.setMediaItems(swap.items, safeIdx, pos)
+                            player.prepare()
+                            player.playWhenReady = true
+                            currentQueue = swap.queue
+                            queueTitle = swap.title
+                        }
+                    }
+                    if (::player.isInitialized && player.volume == 0f) {
                     localPlayer.volume = crossfadeBaseVolume
                 }
             }
@@ -2796,15 +2817,7 @@ class MusicService :
      * playQueueImmediate). Returns false if crossfade is not applicable
      * (caller should proceed with playQueueImmediate).
      */
-    fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
-        Timber.tag(TAG).d(
-            "CF-nq request: enabled=%s manual=%s dur=%s init=%s local=%s current=%s playing=%s fading=%s handoff=%s job=%s",
-            crossfadeEnabled, crossfadeManualSelectionEnabled, crossfadeDurationMs,
-            ::player.isInitialized, ::localPlayer.isInitialized,
-            player.currentMediaItem?.mediaId, player.playWhenReady,
-            isCrossfading, crossfadeHandoffInProgress,
-            crossfade2ManualJob?.isActive,
-        )
+        fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
         if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
         if (!::player.isInitialized || !::localPlayer.isInitialized) return false
         if (player !== localPlayer) return false
@@ -2816,7 +2829,6 @@ class MusicService :
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
         crossfade2ManualJob = scope.launch {
-            var addedIndex = -1
             try {
                 val hideExp = dataStore.get(HideExplicitKey, false)
                 val hideVid = dataStore.get(HideVideoKey, false)
@@ -2826,36 +2838,55 @@ class MusicService :
                 if (status.items.isEmpty()) {
                     playQueueImmediate(queue); return@launch
                 }
-                val item = status.items[status.mediaItemIndex.coerceIn(0, status.items.lastIndex)]
-                val tid = item.mediaId.trim()
-                if (tid.isEmpty() || tid == player.currentMediaItem?.mediaId) {
+
+                val selectedIdx = status.mediaItemIndex.coerceIn(0, status.items.lastIndex)
+                val targetItem = status.items[selectedIdx]
+                val targetId = targetItem.mediaId.trim()
+                if (targetId.isEmpty() || targetId == player.currentMediaItem?.mediaId) {
                     playQueueImmediate(queue); return@launch
                 }
 
-                // Same mechanism as in-queue click:
-                // If the target is not currently in the queue, append it,
-                // then call requestCrossfadeToIndex on that index.
+                // ── Case A: target already in current timeline ──
                 val existing = (0 until player.mediaItemCount).firstOrNull { i ->
                     val it = player.getMediaItemAt(i)
-                    it.mediaId == tid || it.metadata?.id == tid
+                    it.mediaId == targetId || it.metadata?.id == targetId
                 }
-                val idx = existing ?: run {
-                    player.addMediaItem(item)
-                    addedIndex = player.mediaItemCount - 1
-                    Timber.tag(TAG).d("CF-nq appended target=%s count=%s idx=%s",
-                        item.mediaId, player.mediaItemCount, addedIndex)
-                    addedIndex
+                if (existing != null && existing != player.currentMediaItemIndex) {
+                    if (requestCrossfadeToIndex(existing)) {
+                        currentQueue = queue
+                        queueTitle = status.title
+                        return@launch
+                    }
+                    playQueueImmediate(queue); return@launch
                 }
 
-                val accepted = requestCrossfadeToIndex(idx)
-                Timber.tag(TAG).d("CF-nq result=%s idx=%s count=%s secondary=%s",
-                    accepted, idx, player.mediaItemCount, secondaryCrossfadePlayer != null)
-                if (accepted) {
-                    currentQueue = queue
-                    queueTitle = status.title
-                } else {
-                    if (addedIndex in 0 until player.mediaItemCount) {
-                        player.removeMediaItem(addedIndex)
+                // ── Case B: target outside timeline ──
+                // Extend the primary timeline with the target temporarily.
+                // The real queue swap happens at the end of the crossfade.
+                val currentItems = (0 until player.mediaItemCount).map { player.getMediaItemAt(it) }
+                val tempItems = currentItems.toMutableList().also { it.add(targetItem) }
+                val tempIdx = tempItems.lastIndex
+
+                pendingCrossfadeQueueSwap = PendingCrossfadeQueueSwap(
+                    queue = queue,
+                    items = status.items,
+                    targetIndex = selectedIdx,
+                    targetMediaId = targetId,
+                    title = status.title,
+                )
+
+                player.setMediaItems(tempItems, player.currentMediaItemIndex, player.currentPosition)
+                player.prepare()
+
+                // Small settle so Media3 records the new count.
+                delay(60L)
+
+                val accepted = requestCrossfadeToIndex(tempIdx)
+                if (!accepted) {
+                    pendingCrossfadeQueueSwap = null
+                    // roll back to previous queue
+                    if (tempIdx in 0 until player.mediaItemCount) {
+                        runCatching { player.removeMediaItem(tempIdx) }
                     }
                     playQueueImmediate(queue)
                 }
@@ -2863,9 +2894,7 @@ class MusicService :
                 throw c
             } catch (e: Exception) {
                 Timber.tag(TAG).w(e, "CF-nq failed")
-                if (addedIndex in 0 until player.mediaItemCount) {
-                    runCatching { player.removeMediaItem(addedIndex) }
-                }
+                pendingCrossfadeQueueSwap = null
                 playQueueImmediate(queue)
             } finally {
                 crossfade2ManualJob = null
@@ -2873,6 +2902,7 @@ class MusicService :
         }
         return true
     }
+
 
     /**
      * Swap the primary player to a new queue without stopping playback.
@@ -3489,6 +3519,7 @@ class MusicService :
         resetVolume: Boolean,
         resetPauseAtEnd: Boolean,
     ) {
+        pendingCrossfadeQueueSwap = null
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
         crossfadeJob?.cancel()
