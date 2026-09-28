@@ -2645,6 +2645,15 @@ private data class PendingCrossfadeQueueSwap(
     // previous / queue tap / external selection) so the same fade engine
     // can be reused without waiting for end of track.
 
+    /**
+     * Returns whether manual song selection is allowed to use
+     * the overlap crossfade path.
+     */
+    private fun shouldCrossfadeManualSelection(): Boolean =
+        crossfadeEnabled &&
+            crossfadeManualSelectionEnabled &&
+            crossfadeDurationMs > 0L
+
     fun requestCrossfadeToIndex(targetIndex: Int): Boolean {
         if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) {
             Timber.tag(TAG).d("CF-iq rejected: disabled enabled=%s manual=%s dur=%s",
@@ -3430,6 +3439,30 @@ private data class PendingCrossfadeQueueSwap(
             if (shouldContinuePlayback) {
                 if (!awaitPrimaryCrossfadeHandoffReady(incomingPlayer)) {
                     abortCrossfadeAndResumePrimary("primary_handoff_not_ready")
+                    handoffCompleted = true
+                    return
+                }
+
+                /*
+                 * STATE_READY does NOT guarantee audible playback.
+                 *
+                 * The primary player can be READY while the renderer
+                 * has not advanced its playback position yet.
+                 *
+                 * If we release the secondary player here, the user
+                 * can hear a short silence.
+                 */
+                val primaryPositionAfterSeek =
+                    player.currentPosition.coerceAtLeast(0L)
+
+                if (!awaitPrimaryPositionAdvance(
+                        targetIndex = targetIndex,
+                        positionAfterSeekMs = primaryPositionAfterSeek,
+                    )
+                ) {
+                    abortCrossfadeAndResumePrimary(
+                        "primary_position_did_not_advance",
+                    )
                     handoffCompleted = true
                     return
                 }
