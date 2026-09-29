@@ -228,14 +228,11 @@ class PlayerConnection(
             }
         }
 
-    fun playQueue(queue: Queue) {
-        // Snapshot crossfade handles ALL manual song changes uniformly:
-        // the currently playing item is captured in a temporary player,
-        // then playQueueImmediate runs normally, then we fade from the
-        // snapshot to the new primary. This works identically for
-        // Queue taps, Library taps, Search taps, Next/Prev, and any
-        // other entry point that calls playQueue().
-        if (service.requestSnapshotCrossfade(queue)) return
+        fun playQueue(queue: Queue) {
+        // Use the existing secondary-player crossfade engine for manual
+        // queue changes. If crossfade is disabled or the engine cannot
+        // safely handle the transition, fall back to normal playback.
+        if (service.requestCrossfadeToNewQueue(queue)) return
         service.playQueue(queue)
     }
 

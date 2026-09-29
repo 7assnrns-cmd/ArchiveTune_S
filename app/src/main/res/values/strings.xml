@@ -1140,4 +1140,8 @@
     <string name="dynamic_theme_style_instant">Instant</string>
     <string name="dynamic_theme_sync_with_crossfade_title">Sync theme with crossfade</string>
     <string name="dynamic_theme_sync_with_crossfade_description">Make the theme transition last exactly as long as the audio crossfade.</string>
+    <string name="crossfade_manual_selection_title">Crossfade on manual selection</string>
+    <string name="crossfade_manual_selection_description">Use crossfade when manually selecting another song.</string>
+    <string name="crossfade_gapless_title">Gapless crossfade</string>
+    <string name="crossfade_gapless_description">Keep the transition seamless without a playback gap.</string>
 </resources>
