@@ -398,7 +398,6 @@ fun PlayerSettings(navController: NavController) {
                     SwitchPreference(
                         title = { Text(stringResource(R.string.crossfade_manual_selection_title)) },
                         description = stringResource(R.string.crossfade_manual_selection_description),
-                        icon = { Icon(painterResource(R.drawable.touch_app), null) },
                         checked = crossfadeManualSelection,
                         onCheckedChange = onCrossfadeManualSelectionChange,
                         isEnabled = crossfadeEnabled,
