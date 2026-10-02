@@ -2829,11 +2829,13 @@ private data class PendingCrossfadeQueueSwap(
         fun requestCrossfadeToNewQueue(queue: Queue): Boolean {
         if (!crossfadeEnabled || !crossfadeManualSelectionEnabled || crossfadeDurationMs <= 0L) return false
         if (!::player.isInitialized || !::localPlayer.isInitialized) return false
-        if (player !== localPlayer) return false
         if (player.currentMediaItem == null || !player.playWhenReady) return false
         if (player.currentMetadata?.isPodcast == true) return false
         if (isCrossfading || crossfadeHandoffInProgress) return false
-        if (crossfade2ManualJob?.isActive == true) return false
+
+        crossfade2ManualJob?.cancel()
+        crossfade2ManualJob = null
+        pendingCrossfadeQueueSwap = null
 
         crossfadeTriggerJob?.cancel()
         crossfadeTriggerJob = null
@@ -2887,8 +2889,17 @@ private data class PendingCrossfadeQueueSwap(
                 player.setMediaItems(tempItems, player.currentMediaItemIndex, player.currentPosition)
                 player.prepare()
 
-                // Small settle so Media3 records the new count.
-                delay(60L)
+                // Wait for the timeline update without introducing a fixed delay.
+                val settleDeadlineMs =
+                    android.os.SystemClock.elapsedRealtime() + 750L
+
+                while (
+                    isActive &&
+                    player.mediaItemCount <= tempIdx &&
+                    android.os.SystemClock.elapsedRealtime() < settleDeadlineMs
+                ) {
+                    delay(10L)
+                }
 
                 val accepted = requestCrossfadeToIndex(tempIdx)
                 if (!accepted) {

@@ -14,6 +14,8 @@ import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.mapLatest
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.betterlyrics.QRCParser
 import moe.rukamori.archivetune.betterlyrics.TTMLParser
@@ -51,8 +53,12 @@ class PrepareLyricsUseCase
             durationMs: Long,
             preferences: LyricsRenderingPreferences,
         ): Result<PreparedLyrics?> {
+            currentCoroutineContext().ensureActive()
+
             if (storedLyrics == null) return Result.success(null)
+
             val normalizedSource = LyricsUtils.normalizeLyricsText(storedLyrics)
+            currentCoroutineContext().ensureActive()
             val source =
                 if (RAW_TTML_ROOT_REGEX.containsMatchIn(storedLyrics.take(TTML_ROOT_SCAN_LENGTH))) {
                     storedLyrics.removePrefix("\uFEFF").trimStart()
@@ -88,11 +94,27 @@ class PrepareLyricsUseCase
             source: String,
             preferences: LyricsRenderingPreferences,
         ): PreparedLyrics {
+            currentCoroutineContext().ensureActive()
+
             val document = TTMLParser.parseDocument(source).getOrThrow()
-            val lines =
-                document.lines.map { line ->
-                    line.toPreparedLine(document, preferences.romanization)
+
+            currentCoroutineContext().ensureActive()
+
+            val lines = ArrayList<PreparedLyricsLine>(document.lines.size)
+
+            for ((index, line) in document.lines.withIndex()) {
+                if ((index and 7) == 0) {
+                    currentCoroutineContext().ensureActive()
                 }
+
+                lines += line.toPreparedLine(
+                    document,
+                    preferences.romanization,
+                )
+            }
+
+            currentCoroutineContext().ensureActive()
+
             return PreparedLyrics(
                 sourceFormat = LyricsSourceFormat.TTML,
                 syncType = if (document.timingMode == TtmlTimingMode.WORD) LyricsSyncType.WORD else LyricsSyncType.LINE,
@@ -127,9 +149,23 @@ class PrepareLyricsUseCase
                     }
 
                     romanizationPreferences.isEnabled && mainTrack.words.isNotEmpty() -> {
-                        mainTrack.words.map { word ->
-                            LyricsUtils.romanizeLyricsWordWithLineContext(word.text, text, romanizationPreferences)
+                        val values = ArrayList<String?>(mainTrack.words.size)
+
+                        for ((index, word) in mainTrack.words.withIndex()) {
+                            if ((index and 7) == 0) {
+                                currentCoroutineContext().ensureActive()
+                            }
+
+                            values +=
+                                LyricsUtils.romanizeLyricsWordWithLineContext(
+                                    word.text,
+                                    text,
+                                    romanizationPreferences,
+                                )
                         }
+
+                        currentCoroutineContext().ensureActive()
+                        values
                     }
 
                     else -> emptyList()
