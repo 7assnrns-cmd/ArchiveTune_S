@@ -52,9 +52,16 @@ captures/
 .idea/navEditor.xml
 
 # Keystore files
-# Uncomment the following lines if you do not want to check your keystore files in.
-#*.jks
-#*.keystore
+# The fork's release keystore is injected into CI from a GitHub secret
+# and is never committed. See .github/workflows/build.yml.
+#
+# Note: Koiverse.jks, Koiverse.jks.base64, and
+# app/persistent-debug.keystore remain tracked because they were
+# inherited from upstream ArchiveTune. They are NOT used to sign
+# releases from this fork.
+app/keystore/
+*.jks
+*.keystore
 
 # External native build folder generated in Android Studio 2.2 and later
 .externalNativeBuild
