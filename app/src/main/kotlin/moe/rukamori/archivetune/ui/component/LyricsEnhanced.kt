@@ -69,6 +69,9 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -232,10 +235,37 @@ fun LyricsEnhanced(
         selectedLineKeys.clear()
     }
 
-    LaunchedEffect(player, lyricsSessionKey, animationsDisabled, playbackParameters.speed) {
+    // ── Lifecycle gate ──
+    // Stop the position loop while the app is not in the foreground so a
+    // paused / backgrounded player does not keep waking up at 10 Hz via
+    // delay(100) for no reason. When ON_START fires, the loop resumes and
+    // reads player.currentPosition on its first iteration.
+    var isAppMinimized by remember { mutableStateOf(false) }
+    val enhancedLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(enhancedLifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> isAppMinimized = true
+                    Lifecycle.Event.ON_START -> isAppMinimized = false
+                    else -> Unit
+                }
+            }
+        enhancedLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { enhancedLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(player, lyricsSessionKey, animationsDisabled, playbackParameters.speed, isAppMinimized) {
         var smoothedPositionMs = player.currentPosition.coerceAtLeast(0L).toDouble()
         var previousFrameNanos = 0L
         while (isActive) {
+            if (isAppMinimized) {
+                // Background: suspend the loop entirely. We still keep the
+                // coroutine alive so that resuming is instant.
+                delay(250L)
+                previousFrameNanos = 0L
+                continue
+            }
             val sliderPosition = latestSliderPositionProvider.value()
             val rawPosition = (sliderPosition ?: player.currentPosition).coerceAtLeast(0L)
             if (sliderPosition != null || !player.isPlaying || animationsDisabled) {
