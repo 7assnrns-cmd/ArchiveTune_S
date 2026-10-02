@@ -213,6 +213,7 @@ import moe.rukamori.archivetune.constants.DynamicThemeAnimationDurationKey
 import moe.rukamori.archivetune.constants.DynamicThemeAnimationStyleKey
 import moe.rukamori.archivetune.constants.EnableHapticFeedbackKey
 import moe.rukamori.archivetune.constants.FontPreferenceKey
+import moe.rukamori.archivetune.constants.ForceHighRefreshRateKey
 import moe.rukamori.archivetune.constants.HasPressedStarKey
 import moe.rukamori.archivetune.constants.AodModeEnabledKey
 import moe.rukamori.archivetune.constants.LaunchCountKey
@@ -542,9 +543,27 @@ class MainActivity : ComponentActivity() {
         }
     }
 
+    /**
+     * Restores the display to the system-default refresh rate. Called when
+     * the user turns the "Force high refresh rate" preference off, or on
+     * first composition if the preference has never been enabled.
+     */
+    private fun resetRefreshRate() {
+        runCatching {
+            window.attributes =
+                window.attributes.apply {
+                    preferredRefreshRate = 0f
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        preferredDisplayModeId = 0
+                    }
+                }
+        }.onFailure {
+            reportException(it)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
-        applyHighRefreshRate()
         registerAodScreenOffReceiver()
         isMusicServiceBound =
             bindService(
@@ -663,6 +682,24 @@ class MainActivity : ComponentActivity() {
                         } else {
                             window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
                         }
+                    }
+                }
+        }
+
+        // Observe the Force-high-refresh-rate preference so the window
+        // attribute is applied or cleared at runtime, not just on first
+        // launch. The flow fires immediately with the current value, so
+        // this also covers the initial state without a separate call
+        // from onStart.
+        lifecycleScope.launch {
+            dataStore.data
+                .map { it[ForceHighRefreshRateKey] ?: false }
+                .distinctUntilChanged()
+                .collect { enabled ->
+                    if (enabled) {
+                        applyHighRefreshRate()
+                    } else {
+                        resetRefreshRate()
                     }
                 }
         }
