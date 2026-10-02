@@ -231,33 +231,8 @@ fun LyricsScreen(
             ?.preferences
             ?.textContrastGuard
             ?: true
-    val foregroundColor =
-        remember(rawForegroundColor, gradientColors, guardEnabled) {
-            if (!guardEnabled || gradientColors.isEmpty()) {
-                return@remember rawForegroundColor
-            }
-            val avgBackground =
-                Color(
-                    red = gradientColors.map { it.red }.average().toFloat(),
-                    green = gradientColors.map { it.green }.average().toFloat(),
-                    blue = gradientColors.map { it.blue }.average().toFloat(),
-                )
-            val bgLum = avgBackground.luminance()
-            val fgLum = rawForegroundColor.luminance()
-            val contrastRatio =
-                if (bgLum > fgLum) {
-                    (bgLum + 0.05f) / (fgLum + 0.05f)
-                } else {
-                    (fgLum + 0.05f) / (bgLum + 0.05f)
-                }
-            if (contrastRatio >= 4.5f) return@remember rawForegroundColor
-            // Nudge toward whichever endpoint is farther from the
-            // background. Blend 60% toward that endpoint — enough to
-            // clear the threshold in the vast majority of cases without
-            // losing the identity of the original colour.
-            val target = if (bgLum > 0.5f) Color.Black else Color.White
-            androidx.compose.ui.graphics.lerp(rawForegroundColor, target, 0.6f)
-        }
+    // The actual foregroundColor derivation lives below, after
+    // gradientColors is declared, since it reads that state.
     val showPlayerControlsState =
         rememberPreference(ShowLyricsPlayerControlsKey, true)
     val showPlayerControls by showPlayerControlsState
@@ -320,6 +295,38 @@ fun LyricsScreen(
     val durationState = remember(mediaMetadata.id) { mutableLongStateOf(C.TIME_UNSET) }
     var sliderPosition by remember(mediaMetadata.id) { mutableStateOf<Long?>(null) }
     var gradientColors by remember(mediaMetadata.thumbnailUrl) { mutableStateOf(AppleMusicFallbackGradient) }
+
+    // Resolve the effective foreground color for lyrics using the
+    // contrast guard. Placed here (rather than next to rawForegroundColor)
+    // because it reads gradientColors, which is declared immediately
+    // above.
+    val foregroundColor =
+        remember(rawForegroundColor, gradientColors, guardEnabled) {
+            if (!guardEnabled || gradientColors.isEmpty()) {
+                return@remember rawForegroundColor
+            }
+            val avgBackground =
+                Color(
+                    red = gradientColors.map { it.red }.average().toFloat(),
+                    green = gradientColors.map { it.green }.average().toFloat(),
+                    blue = gradientColors.map { it.blue }.average().toFloat(),
+                )
+            val bgLum = avgBackground.luminance()
+            val fgLum = rawForegroundColor.luminance()
+            val contrastRatio =
+                if (bgLum > fgLum) {
+                    (bgLum + 0.05f) / (fgLum + 0.05f)
+                } else {
+                    (fgLum + 0.05f) / (bgLum + 0.05f)
+                }
+            if (contrastRatio >= 4.5f) return@remember rawForegroundColor
+            // Nudge toward whichever endpoint is farther from the
+            // background. Blend 60% toward that endpoint — enough to
+            // clear the threshold in the vast majority of cases without
+            // losing the identity of the original colour.
+            val target = if (bgLum > 0.5f) Color.Black else Color.White
+            androidx.compose.ui.graphics.lerp(rawForegroundColor, target, 0.6f)
+        }
 
     val lyricsDurationMs = durationState.longValue.takeIf { it != C.TIME_UNSET } ?: 0L
     LaunchedEffect(mediaMetadata.id, lyricsDurationMs) {
