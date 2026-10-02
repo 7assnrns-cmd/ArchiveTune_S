@@ -33,6 +33,7 @@ import moe.rukamori.archivetune.constants.LyricsV2BounceFactorKey
 import moe.rukamori.archivetune.constants.LyricsV2FillTransitionWidthKey
 import moe.rukamori.archivetune.constants.LyricsV2GlowFactorKey
 import moe.rukamori.archivetune.constants.LyricsV2LrcBounceEnabledKey
+import moe.rukamori.archivetune.constants.LyricsCharacterLevelAnimationKey
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.PreferenceEntry
 import moe.rukamori.archivetune.ui.component.PreferenceGroup
@@ -46,6 +47,7 @@ fun LyricsAnimationSettings(navController: NavController) {
     val (glowFactor, onGlowFactorChange) = rememberPreference(LyricsV2GlowFactorKey, defaultValue = 1f)
     val (fillTransitionWidth, onFillTransitionWidthChange) = rememberPreference(LyricsV2FillTransitionWidthKey, defaultValue = 8f)
     val (lrcBounceEnabled, onLrcBounceEnabledChange) = rememberPreference(LyricsV2LrcBounceEnabledKey, defaultValue = true)
+    val (characterLevelAnimation, onCharacterLevelAnimationChange) = rememberPreference(LyricsCharacterLevelAnimationKey, defaultValue = false)
 
     Scaffold(
         topBar = {
@@ -88,6 +90,20 @@ fun LyricsAnimationSettings(navController: NavController) {
                             Switch(
                                 checked = lrcBounceEnabled,
                                 onCheckedChange = onLrcBounceEnabledChange,
+                            )
+                        },
+                    )
+                }
+
+                item {
+                    PreferenceEntry(
+                        title = { Text("Letter-by-letter animation") },
+                        description = "Each character rises individually as it is sung (Latin/CJK only; falls back for Arabic, Devanagari, Thai, etc.)",
+                        icon = { Icon(painterResource(R.drawable.animation), null) },
+                        trailingContent = {
+                            Switch(
+                                checked = characterLevelAnimation,
+                                onCheckedChange = onCharacterLevelAnimationChange,
                             )
                         },
                     )

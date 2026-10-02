@@ -40,6 +40,7 @@ import moe.rukamori.archivetune.constants.LyricsTextColorCustomKey
 import moe.rukamori.archivetune.constants.LyricsTextColorModeKey
 import moe.rukamori.archivetune.constants.LyricsTextContrastGuardKey
 import moe.rukamori.archivetune.constants.LyricsContrastBlendStrengthKey
+import moe.rukamori.archivetune.constants.LyricsCharacterLevelAnimationKey
 import moe.rukamori.archivetune.constants.LyricsContrastThresholdKey
 import moe.rukamori.archivetune.constants.LyricsTranslationAlphaKey
 import moe.rukamori.archivetune.constants.LyricsTranslationItalicKey
@@ -124,6 +125,7 @@ class LyricsRenderingRepository
                         translationAlpha =
                             (values[LyricsTranslationAlphaKey] ?: 0.76f).coerceIn(0.3f, 1f),
                         translationItalic = values[LyricsTranslationItalicKey] ?: false,
+                        characterLevelAnimation = values[LyricsCharacterLevelAnimationKey] ?: false,
                     )
                 }.distinctUntilChanged()
 

@@ -199,6 +199,7 @@ fun LyricsV2(
     val glowFactor = preferences?.v2GlowFactor ?: 1f
     val fillTransitionWidth = preferences?.v2FillTransitionWidthDp ?: 8f
     val lrcBounceEnabled = preferences?.v2LrcBounceEnabled ?: true
+    val characterLevelAnimation = preferences?.characterLevelAnimation ?: false
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
     val playerBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.DEFAULT)
 
@@ -845,6 +846,7 @@ fun LyricsV2(
                                 bounceFactor = bounceFactor,
                                 glowFactor = glowFactor,
                                 fillTransitionWidth = fillTransitionWidth,
+                                characterLevelAnimation = characterLevelAnimation,
                             )
                         } else if (isSynced) {
                             LyricsLineLrcBounce(
@@ -1139,6 +1141,7 @@ private fun LyricsLineV2(
     bounceFactor: Float,
     glowFactor: Float,
     fillTransitionWidth: Float,
+    characterLevelAnimation: Boolean,
 ) {
     val arrangement =
         when (textAlign) {
@@ -1190,6 +1193,7 @@ private fun LyricsLineV2(
                     bounceFactor = bounceFactor,
                     glowFactor = glowFactor,
                     fillTransitionWidth = fillTransitionWidth,
+                    characterLevelAnimation = characterLevelAnimation,
                 )
             }
         }
@@ -1233,6 +1237,7 @@ private fun LyricsLineV2(
                     bounceFactor = bounceFactor,
                     glowFactor = glowFactor,
                     fillTransitionWidth = fillTransitionWidth,
+                    characterLevelAnimation = characterLevelAnimation,
                 )
             }
         }
@@ -1259,7 +1264,36 @@ private fun AnimatedWordV2(
     bounceFactor: Float,
     glowFactor: Float,
     fillTransitionWidth: Float,
+    characterLevelAnimation: Boolean = false,
 ) {
+    // Optional character-by-character rendering. Only enabled for scripts
+    // that render safely when isolated; RTL and complex-script shaping
+    // would break if we split mid-word, so those fall back to the
+    // existing whole-word animation.
+    val useCharacterMode =
+        characterLevelAnimation &&
+            word.text.length > 1 &&
+            word.text != " " &&
+            word.text != "\n" &&
+            isSafeForCharacterSplit(word.text)
+    if (useCharacterMode) {
+        AnimatedWordCharactersV2(
+            word = word,
+            isLineActive = isLineActive,
+            isLinePast = isLinePast,
+            currentPositionMs = currentPositionMs,
+            textColor = textColor,
+            inactiveAlpha = inactiveAlpha,
+            fontSize = fontSize,
+            isBackground = isBackground,
+            lyricsFontFamily = lyricsFontFamily,
+            isRtl = isRtl,
+            bounceFactor = bounceFactor,
+            glowFactor = glowFactor,
+        )
+        return
+    }
+
     val wordStartMs = (word.startTime * 1000).roundToLong()
     val wordEndMs = (word.endTime * 1000).roundToLong()
     val wordDuration = (wordEndMs - wordStartMs).coerceAtLeast(1L)
@@ -1624,3 +1658,237 @@ private fun InstrumentalBreakItem(
         }
     }
 }
+
+// ──────────────────────────────────────────────────────────────────────
+// Character-level (letter-by-letter) V2 animation
+// ──────────────────────────────────────────────────────────────────────
+
+/**
+ * Character-by-character variant of the word-level animation.
+ *
+ * Each grapheme (user-perceived character) receives an equal slice of
+ * the word's timing window, so the singer's words ripple through the
+ * line as individual letters rise and fade in. Scripts that cannot be
+ * split mid-word (Arabic, Devanagari, Thai, etc.) never reach this
+ * function — [isSafeForCharacterSplit] gates the call site.
+ */
+@Composable
+private fun AnimatedWordCharactersV2(
+    word: WordTimestamp,
+    isLineActive: Boolean,
+    isLinePast: Boolean,
+    currentPositionMs: Long,
+    textColor: Color,
+    inactiveAlpha: Float,
+    fontSize: Float,
+    isBackground: Boolean,
+    lyricsFontFamily: FontFamily?,
+    isRtl: Boolean,
+    bounceFactor: Float,
+    glowFactor: Float,
+) {
+    val graphemes = remember(word.text) { word.text.toCharacterGraphemes() }
+    if (graphemes.isEmpty()) return
+
+    val wordStartMs = (word.startTime * 1000).roundToLong()
+    val wordEndMs = (word.endTime * 1000).roundToLong()
+    val wordDuration = (wordEndMs - wordStartMs).coerceAtLeast(1L)
+    val graphemeCount = graphemes.size
+    val actualFontSize = if (isBackground) fontSize * 0.85f else fontSize
+    val fontWeight = if (isLineActive || isLinePast) FontWeight.ExtraBold else FontWeight.SemiBold
+
+    Row {
+        graphemes.forEachIndexed { index, grapheme ->
+            val charStartMs = wordStartMs + (wordDuration * index / graphemeCount)
+            val charEndMs = wordStartMs + (wordDuration * (index + 1) / graphemeCount)
+            AnimatedCharacterV2(
+                character = grapheme,
+                charStartMs = charStartMs,
+                charEndMs = charEndMs,
+                currentPositionMs = currentPositionMs,
+                textColor = textColor,
+                inactiveAlpha = inactiveAlpha,
+                actualFontSize = actualFontSize,
+                fontWeight = fontWeight,
+                isBackground = isBackground,
+                lyricsFontFamily = lyricsFontFamily,
+                isRtl = isRtl,
+                bounceFactor = bounceFactor,
+                glowFactor = glowFactor,
+            )
+        }
+    }
+}
+
+@Composable
+private fun AnimatedCharacterV2(
+    character: String,
+    charStartMs: Long,
+    charEndMs: Long,
+    currentPositionMs: Long,
+    textColor: Color,
+    inactiveAlpha: Float,
+    actualFontSize: Float,
+    fontWeight: FontWeight,
+    isBackground: Boolean,
+    lyricsFontFamily: FontFamily?,
+    isRtl: Boolean,
+    bounceFactor: Float,
+    glowFactor: Float,
+) {
+    val charDuration = (charEndMs - charStartMs).coerceAtLeast(1L)
+    val isCharComplete = currentPositionMs >= charEndMs
+    val isCharActive = currentPositionMs in charStartMs until charEndMs
+    val progress =
+        when {
+            isCharComplete -> 1f
+            currentPositionMs <= charStartMs -> 0f
+            else -> ((currentPositionMs - charStartMs).toFloat() / charDuration).coerceIn(0f, 1f)
+        }
+
+    // Bounce + float, matching the word-level feel but at character scale.
+    val sinProgress = kotlin.math.sin(progress * kotlin.math.PI).toFloat()
+    val charScale = 1f + (0.015f * bounceFactor * sinProgress)
+    val targetFloat = if (isCharActive) -4f * bounceFactor * sinProgress else 0f
+    val floatOffset by androidx.compose.animation.core.animateFloatAsState(
+        targetValue = targetFloat,
+        animationSpec =
+            androidx.compose.animation.core.tween(
+                durationMillis = if (isCharActive) 50 else 200,
+                easing = androidx.compose.animation.core.FastOutSlowInEasing,
+            ),
+        label = "v2CharFloatOffset",
+    )
+
+    val glowProgress = (progress * 2f).coerceAtMost(1f)
+    val glowAlpha = if (isCharActive) glowProgress * 0.45f * glowFactor else 0f
+    val glowRadius = if (isCharActive) glowProgress * 12f * glowFactor else 0f
+    val overlayAlpha = if (isBackground) 0.75f else 1f
+    val baseAlpha = if (isBackground) inactiveAlpha * 0.7f else inactiveAlpha
+    val glowPadding = 10.dp
+
+    Box(
+        modifier =
+            Modifier
+                .layout { measurable, constraints ->
+                    val glowPaddingPx = glowPadding.roundToPx()
+                    val looseConstraints =
+                        constraints.copy(
+                            minWidth = 0,
+                            maxWidth = constraints.maxWidth,
+                            minHeight = 0,
+                            maxHeight = Constraints.Infinity,
+                        )
+                    val placeable = measurable.measure(looseConstraints)
+                    val coreWidth = (placeable.width - glowPaddingPx * 2).coerceAtLeast(0)
+                    val coreHeight = (placeable.height - glowPaddingPx * 2).coerceAtLeast(0)
+                    layout(coreWidth, coreHeight) {
+                        placeable.place(-glowPaddingPx, -glowPaddingPx)
+                    }
+                }
+                .graphicsLayer {
+                    clip = false
+                    translationY = floatOffset * density
+                    scaleX = charScale
+                    scaleY = charScale
+                },
+    ) {
+        Text(
+            text = character,
+            style =
+                MaterialTheme.typography.headlineMedium.copy(
+                    fontSize = actualFontSize.sp,
+                    fontWeight = fontWeight,
+                    fontStyle = FontStyle.Normal,
+                    lineHeight = (actualFontSize * 1.35f).sp,
+                    fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
+                ),
+            color = textColor.copy(alpha = baseAlpha),
+            modifier = Modifier.padding(glowPadding),
+        )
+        if (isCharComplete || isCharActive) {
+            Text(
+                text = character,
+                style =
+                    MaterialTheme.typography.headlineMedium.copy(
+                        fontSize = actualFontSize.sp,
+                        fontWeight = fontWeight,
+                        fontStyle = FontStyle.Normal,
+                        lineHeight = (actualFontSize * 1.35f).sp,
+                        fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
+                        shadow =
+                            if (glowAlpha > 0f) {
+                                Shadow(
+                                    color = textColor.copy(alpha = glowAlpha),
+                                    offset = Offset.Zero,
+                                    blurRadius = glowRadius.coerceAtLeast(1f),
+                                )
+                            } else {
+                                null
+                            },
+                    ),
+                color = textColor.copy(alpha = overlayAlpha * progress),
+                modifier = Modifier.padding(glowPadding),
+            )
+        }
+    }
+}
+
+/**
+ * Returns false when [text] contains a script that would break if the
+ * word were split into isolated graphemes (contextual letter shaping).
+ */
+private fun isSafeForCharacterSplit(text: String): Boolean {
+    for (ch in text) {
+        val script = java.lang.Character.UnicodeScript.of(ch.code)
+        when (script) {
+            java.lang.Character.UnicodeScript.ARABIC,
+            java.lang.Character.UnicodeScript.SYRIAC,
+            java.lang.Character.UnicodeScript.THAANA,
+            java.lang.Character.UnicodeScript.DEVANAGARI,
+            java.lang.Character.UnicodeScript.BENGALI,
+            java.lang.Character.UnicodeScript.GURMUKHI,
+            java.lang.Character.UnicodeScript.GUJARATI,
+            java.lang.Character.UnicodeScript.ORIYA,
+            java.lang.Character.UnicodeScript.TAMIL,
+            java.lang.Character.UnicodeScript.TELUGU,
+            java.lang.Character.UnicodeScript.KANNADA,
+            java.lang.Character.UnicodeScript.MALAYALAM,
+            java.lang.Character.UnicodeScript.SINHALA,
+            java.lang.Character.UnicodeScript.THAI,
+            java.lang.Character.UnicodeScript.LAO,
+            java.lang.Character.UnicodeScript.TIBETAN,
+            java.lang.Character.UnicodeScript.MYANMAR,
+            java.lang.Character.UnicodeScript.KHMER,
+            -> return false
+            else -> Unit
+        }
+    }
+    return true
+}
+
+/**
+ * Splits [this] into user-perceived characters using the platform's
+ * BreakIterator, so emoji (surrogate pairs), combining marks, and
+ * regional indicators stay intact. Falls back to per-code-unit
+ * splitting if BreakIterator is unavailable.
+ */
+private fun String.toCharacterGraphemes(): List<String> {
+    if (isEmpty()) return emptyList()
+    return runCatching {
+        val iterator = java.text.BreakIterator.getCharacterInstance()
+        iterator.setText(this)
+        val result = ArrayList<String>(length)
+        var start = iterator.first()
+        var end = iterator.next()
+        while (end != java.text.BreakIterator.DONE) {
+            result += substring(start, end)
+            start = end
+            end = iterator.next()
+        }
+        result
+    }.getOrElse {
+        map { it.toString() }
+    }
+}
+

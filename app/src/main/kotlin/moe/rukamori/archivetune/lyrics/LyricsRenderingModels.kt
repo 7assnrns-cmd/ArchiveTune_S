@@ -128,6 +128,7 @@ data class LyricsRenderingPreferences(
     val translationLineHeightScale: Float,
     val translationAlpha: Float,
     val translationItalic: Boolean,
+    val characterLevelAnimation: Boolean,
 )
 
 @Immutable

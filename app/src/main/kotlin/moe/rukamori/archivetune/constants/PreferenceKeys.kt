@@ -794,6 +794,9 @@ val LyricsTranslationLineHeightScaleKey = floatPreferencesKey("lyricsTranslation
 val LyricsTranslationAlphaKey = floatPreferencesKey("lyricsTranslationAlpha")
 val LyricsTranslationItalicKey = booleanPreferencesKey("lyricsTranslationItalic")
 
+// Character-level (letter-by-letter) V2 animation
+val LyricsCharacterLevelAnimationKey = booleanPreferencesKey("lyricsCharacterLevelAnimation")
+
 val PlayerVolumeKey = floatPreferencesKey("playerVolume")
 val RepeatModeKey = intPreferencesKey("repeatMode")
 val SponsorBlockEnabledKey = booleanPreferencesKey("sponsorBlockEnabled")
