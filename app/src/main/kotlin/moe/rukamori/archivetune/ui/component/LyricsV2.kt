@@ -1739,6 +1739,7 @@ private fun AnimatedCharacterV2(
     val charDuration = (charEndMs - charStartMs).coerceAtLeast(1L)
     val isCharComplete = currentPositionMs >= charEndMs
     val isCharActive = currentPositionMs in charStartMs until charEndMs
+    val isCharStarted = currentPositionMs >= charStartMs
     val progress =
         when {
             isCharComplete -> 1f
@@ -1746,19 +1747,24 @@ private fun AnimatedCharacterV2(
             else -> ((currentPositionMs - charStartMs).toFloat() / charDuration).coerceIn(0f, 1f)
         }
 
-    // Bounce + float, matching the word-level feel but at character scale.
-    val sinProgress = kotlin.math.sin(progress * kotlin.math.PI).toFloat()
-    val charScale = 1f + (0.015f * bounceFactor * sinProgress)
-    val targetFloat = if (isCharActive) -4f * bounceFactor * sinProgress else 0f
+    // Rise-and-stay per character. Each grapheme rises once its syllable
+    // begins and keeps its lift for the rest of the line, so the word
+    // appears to climb letter by letter instead of bouncing as a unit.
+    val riseAmount = -4f * bounceFactor
+    val targetFloat = if (isCharStarted) riseAmount else 0f
     val floatOffset by androidx.compose.animation.core.animateFloatAsState(
         targetValue = targetFloat,
         animationSpec =
             androidx.compose.animation.core.tween(
-                durationMillis = if (isCharActive) 50 else 200,
+                durationMillis = 120,
                 easing = androidx.compose.animation.core.FastOutSlowInEasing,
             ),
-        label = "v2CharFloatOffset",
+        label = "v2CharRise",
     )
+    // Scale remains a brief pulse while the character is actively being
+    // sung, so the "current letter" reads as alive rather than static.
+    val sinProgress = kotlin.math.sin(progress * kotlin.math.PI).toFloat()
+    val charScale = 1f + (0.02f * bounceFactor * sinProgress)
 
     val glowProgress = (progress * 2f).coerceAtMost(1f)
     val glowAlpha = if (isCharActive) glowProgress * 0.45f * glowFactor else 0f

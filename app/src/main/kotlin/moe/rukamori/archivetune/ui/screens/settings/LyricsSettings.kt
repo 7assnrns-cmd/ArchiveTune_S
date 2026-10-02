@@ -504,14 +504,15 @@ fun LyricsSettings(
             }
 
             item {
-                val animationSettingsEnabled = lyricsMode == LyricsMode.V2
-
+                // Animation tuning now applies to both renderers. The
+                // letter-by-letter toggle in particular drives both V2
+                // (through our own AnimatedCharacter composable) and
+                // Enhanced (through the character split performed before
+                // syllables are handed to KaraokeLyricsView).
                 PreferenceEntry(
                     title = { Text(stringResource(R.string.lyrics_animation_style)) },
-                    description = if (animationSettingsEnabled) null else stringResource(R.string.lyrics_animation_style_v2_only),
                     icon = { Icon(painterResource(R.drawable.animation), null) },
                     onClick = { navController.navigate("settings/appearance/lyrics_animations") },
-                    isEnabled = animationSettingsEnabled,
                 )
             }
 
