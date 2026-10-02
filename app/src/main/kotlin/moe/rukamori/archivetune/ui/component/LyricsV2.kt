@@ -100,6 +100,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -310,9 +311,18 @@ fun LyricsV2(
     // ── Scroll State ──
     val listState = rememberLazyListState()
     var isManualScrolling by remember { mutableStateOf(false) }
-    var lastManualScrollTime by remember { mutableLongStateOf(0L) }
 
-    // Detect manual scrolling
+    // Detect manual scrolling.
+    //
+    // The idle-timeout that clears isManualScrolling is driven by a Job
+    // held in a MutableState rather than by a LaunchedEffect keyed on a
+    // timestamp. The previous version wrote System.currentTimeMillis() on
+    // every scroll event, which changed the LaunchedEffect key on every
+    // pixel of scroll and recomposed the entire lyrics list per frame
+    // during the gesture.
+    val manualScrollResetJob = remember { mutableStateOf<Job?>(null) }
+    val manualScrollResetScope = rememberCoroutineScope()
+
     val nestedScrollConnection =
         remember {
             object : NestedScrollConnection {
@@ -322,20 +332,17 @@ fun LyricsV2(
                 ): Offset {
                     if (!isSelectionModeActive && source == NestedScrollSource.UserInput) {
                         isManualScrolling = true
-                        lastManualScrollTime = System.currentTimeMillis()
+                        manualScrollResetJob.value?.cancel()
+                        manualScrollResetJob.value =
+                            manualScrollResetScope.launch {
+                                delay(MANUAL_SCROLL_TIMEOUT_MS)
+                                isManualScrolling = false
+                            }
                     }
                     return Offset.Zero
                 }
             }
         }
-
-    // Resume auto-scroll after timeout
-    LaunchedEffect(isManualScrolling, lastManualScrollTime) {
-        if (isManualScrolling) {
-            delay(MANUAL_SCROLL_TIMEOUT_MS)
-            isManualScrolling = false
-        }
-    }
 
     // Auto-scroll to active line
     LaunchedEffect(currentLineIndex, isManualScrolling, lyricsScroll) {
