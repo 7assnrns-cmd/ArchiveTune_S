@@ -64,6 +64,7 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -188,7 +189,7 @@ fun LyricsScreen(
     val dynamicThemePrimary = MaterialTheme.colorScheme.primary
     val dynamicThemeTertiary = MaterialTheme.colorScheme.tertiary
     val dynamicThemeOnSurface = MaterialTheme.colorScheme.onSurface
-    val foregroundColor =
+    val rawForegroundColor =
         remember(
             lyricsBackground,
             lyricsRenderState,
@@ -216,6 +217,46 @@ fun LyricsScreen(
                 LyricsTextColorMode.DYNAMIC_THEME_TERTIARY -> dynamicThemeTertiary
                 LyricsTextColorMode.CUSTOM -> custom ?: Color.White
             }
+        }
+
+    // Contrast guard: if the resolved text colour does not reach WCAG AA
+    // (4.5:1) against the sampled background, nudge it toward white or
+    // black — whichever gives more contrast — by the minimum amount
+    // needed. This keeps the DYNAMIC_THEME_PRIMARY path legible on very
+    // bright or very dark artwork, where the primary colour can end up
+    // nearly identical to the background.
+    val guardEnabled =
+        (lyricsRenderState as? LyricsRenderScreenState.Success)
+            ?.lyrics
+            ?.preferences
+            ?.textContrastGuard
+            ?: true
+    val foregroundColor =
+        remember(rawForegroundColor, gradientColors, guardEnabled) {
+            if (!guardEnabled || gradientColors.isEmpty()) {
+                return@remember rawForegroundColor
+            }
+            val avgBackground =
+                Color(
+                    red = gradientColors.map { it.red }.average().toFloat(),
+                    green = gradientColors.map { it.green }.average().toFloat(),
+                    blue = gradientColors.map { it.blue }.average().toFloat(),
+                )
+            val bgLum = avgBackground.luminance()
+            val fgLum = rawForegroundColor.luminance()
+            val contrastRatio =
+                if (bgLum > fgLum) {
+                    (bgLum + 0.05f) / (fgLum + 0.05f)
+                } else {
+                    (fgLum + 0.05f) / (bgLum + 0.05f)
+                }
+            if (contrastRatio >= 4.5f) return@remember rawForegroundColor
+            // Nudge toward whichever endpoint is farther from the
+            // background. Blend 60% toward that endpoint — enough to
+            // clear the threshold in the vast majority of cases without
+            // losing the identity of the original colour.
+            val target = if (bgLum > 0.5f) Color.Black else Color.White
+            androidx.compose.ui.graphics.lerp(rawForegroundColor, target, 0.6f)
         }
     val showPlayerControlsState =
         rememberPreference(ShowLyricsPlayerControlsKey, true)

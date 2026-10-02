@@ -105,6 +105,7 @@ import moe.rukamori.archivetune.constants.LyricsPhoneticOverrideKey
 import moe.rukamori.archivetune.constants.LyricsSelectionLimitKey
 import moe.rukamori.archivetune.constants.LyricsSmoothPlaybackKey
 import moe.rukamori.archivetune.constants.LyricsTextColorModeKey
+import moe.rukamori.archivetune.constants.LyricsTextColorCustomKey
 import moe.rukamori.archivetune.constants.LyricsTextContrastGuardKey
 import moe.rukamori.archivetune.constants.LyricsTranslationOverrideKey
 import moe.rukamori.archivetune.constants.LyricsViewportOffsetFractionKey
@@ -142,6 +143,7 @@ fun LyricsSettings(
     var showClearLyricsDialog by remember { mutableStateOf(false) }
     var showPaxsenixStatsDialog by remember { mutableStateOf(false) }
     var showPaxsenixApiKeyDialog by rememberSaveable { mutableStateOf(false) }
+    var showCustomColorDialog by rememberSaveable { mutableStateOf(false) }
 
     if (showClearLyricsDialog) {
         ActionPromptDialog(
@@ -256,10 +258,38 @@ fun LyricsSettings(
     // Text colour (merged with dynamic theme)
     val (textColorMode, onTextColorModeChange) =
         rememberEnumPreference(LyricsTextColorModeKey, defaultValue = LyricsTextColorMode.DEFAULT)
+    val (textColorCustomRaw, onTextColorCustomRawChange) =
+        rememberPreference(LyricsTextColorCustomKey, defaultValue = "")
     val (inactiveLineAlpha, onInactiveLineAlphaChange) =
         rememberPreference(LyricsInactiveLineAlphaKey, defaultValue = 0.35f)
     val (textContrastGuard, onTextContrastGuardChange) =
         rememberPreference(LyricsTextContrastGuardKey, defaultValue = true)
+
+    if (showCustomColorDialog) {
+        val keyboardOptions =
+            remember {
+                KeyboardOptions(
+                    keyboardType = KeyboardType.Ascii,
+                    imeAction = ImeAction.Done,
+                )
+            }
+        TextFieldDialog(
+            title = { Text("Custom lyrics text colour") },
+            initialTextFieldValue = TextFieldValue(textColorCustomRaw),
+            keyboardOptions = keyboardOptions,
+            isInputValid = { value ->
+                val normalized = value.trim().removePrefix("#")
+                normalized.length in setOf(3, 6, 8) &&
+                    normalized.all { it.isDigit() || it.lowercaseChar() in 'a'..'f' }
+            },
+            onDone = { value ->
+                val normalized = value.trim()
+                onTextColorCustomRawChange(normalized)
+                showCustomColorDialog = false
+            },
+            onDismiss = { showCustomColorDialog = false },
+        )
+    }
 
     if (showPaxsenixApiKeyDialog) {
         val passwordVisualTransformation = remember { PasswordVisualTransformation() }
@@ -687,6 +717,17 @@ fun LyricsSettings(
                         }
                     },
                 )
+            }
+
+            if (textColorMode == LyricsTextColorMode.CUSTOM) {
+                item {
+                    PreferenceEntry(
+                        title = { Text("Custom text colour") },
+                        description = textColorCustomRaw.ifBlank { "Not set — tap to enter hex" },
+                        icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                        onClick = { showCustomColorDialog = true },
+                    )
+                }
             }
 
             item {
