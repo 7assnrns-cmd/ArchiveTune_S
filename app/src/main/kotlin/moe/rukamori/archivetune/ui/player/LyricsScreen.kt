@@ -329,8 +329,17 @@ fun LyricsScreen(
     LaunchedEffect(player, playbackState, mediaMetadata.id) {
         if (playbackState != STATE_READY && playbackState != STATE_BUFFERING) return@LaunchedEffect
         while (isActive) {
-            positionState.longValue = player.currentPosition.coerceAtLeast(0L)
-            durationState.longValue = player.duration
+            // Guarded writes: while paused / buffering / stalled the position
+            // does not change, so skipping the write avoids recomposing the
+            // slider and time labels on every tick.
+            val newPosition = player.currentPosition.coerceAtLeast(0L)
+            if (positionState.longValue != newPosition) {
+                positionState.longValue = newPosition
+            }
+            val newDuration = player.duration
+            if (durationState.longValue != newDuration) {
+                durationState.longValue = newDuration
+            }
             delay(250)
         }
     }

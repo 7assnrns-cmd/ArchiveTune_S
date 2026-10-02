@@ -2739,7 +2739,15 @@ private data class PendingCrossfadeQueueSwap(
                     delay(CROSSFADE_FRAME_MS)
                 }
 
-                // Handoff WITHOUT pause. Silent + seek + prepare + wait.
+                // Handoff WITHOUT pause. Primary stays silent while it
+                // seeks and buffers the incoming track; secondary keeps
+                // producing audio during the transition. Once the primary
+                // is actually producing audio at the target position, the
+                // two players fade in opposite directions over
+                // CROSSFADE_HANDOFF_DURATION_MS so the sum stays roughly
+                // constant and the transition is inaudible. Without this
+                // ramp, primary.volume jumped from 0f to full gain in a
+                // single frame, which was audible as a click.
                 localPlayer.volume = 0f
                 player.seekTo(targetIndex, incoming.currentPosition.coerceAtLeast(0L))
                 player.playWhenReady = true
@@ -2754,8 +2762,27 @@ private data class PendingCrossfadeQueueSwap(
                     delay(25L)
                 }
                 if (swapped) {
-                    localPlayer.volume = crossfadeIncomingBaseVolume
-                    scheduleCrossfade()
+                    val handoffBaseVolume =
+                        secondaryCrossfadeTarget?.let {
+                            currentEffectivePlayerVolumeForMediaId(it.mediaId)
+                        } ?: crossfadeIncomingBaseVolume
+                    crossfadeIncomingBaseVolume = handoffBaseVolume
+
+                    crossfadeHandoffInProgress = true
+                    crossfadeHandoffProgress = 0f
+                    try {
+                        val handoffOk = performCrossfadeHandoff(targetIndex, incoming)
+                        if (handoffOk) {
+                            localPlayer.volume = handoffBaseVolume
+                            scheduleCrossfade()
+                        } else {
+                            Timber.tag(TAG).w("CF-iq: primary handoff ramp failed")
+                            abortCrossfadeAndResumePrimary("primary_handoff_ramp_failed")
+                        }
+                    } finally {
+                        crossfadeHandoffInProgress = false
+                        crossfadeHandoffProgress = 0f
+                    }
                 } else {
                     Timber.tag(TAG).w("CF-iq: primary handoff failed; falling back to primary playback")
                     abortCrossfadeAndResumePrimary("primary_handoff_failed")

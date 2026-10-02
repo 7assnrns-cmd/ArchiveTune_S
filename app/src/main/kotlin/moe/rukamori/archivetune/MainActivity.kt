@@ -188,6 +188,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.distinctUntilChangedBy
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -910,6 +911,13 @@ class MainActivity : ComponentActivity() {
                     themeColor = if (!enableDynamicTheme) customThemeColor else DefaultThemeColor
                     return@LaunchedEffect
                 }
+                // Key the theme extraction on media ID only. Without this,
+                // any metadata mutation on the current song (liked state,
+                // in-library flag, etc.) would re-run palette extraction even
+                // though the artwork is unchanged. During a crossfade this
+                // also prevents re-extraction when crossfadeThemeTarget
+                // clears back to null while currentMediaMetadata already
+                // points at the incoming track.
                 val themeFlow =
                     if (dynamicThemeSyncWithCrossfade) {
                         kotlinx.coroutines.flow.combine(
@@ -917,9 +925,10 @@ class MainActivity : ComponentActivity() {
                             playerConnection.service.crossfadeThemeTarget,
                         ) { current, incoming ->
                             incoming ?: current
-                        }
+                        }.distinctUntilChangedBy { it?.id }
                     } else {
                         playerConnection.service.currentMediaMetadata
+                            .distinctUntilChangedBy { it?.id }
                     }
                 themeFlow.collectLatest { song ->
                     if (song != null) {

@@ -62,6 +62,10 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
+import androidx.lifecycle.Lifecycle
+import androidx.lifecycle.LifecycleEventObserver
+import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -96,6 +100,7 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -133,6 +138,12 @@ private const val WORD_SYNC_LEAD_MS = 0L
 
 /** Seconds to wait before auto-scroll resumes after manual scroll. */
 private const val MANUAL_SCROLL_TIMEOUT_MS = 3000L
+
+/** Poll interval (ms) for line-synced lyrics while the app is in the foreground. */
+private const val LINE_SYNC_POLL_INTERVAL_MS = 50L
+
+/** Poll interval (ms) for the position loop while the app is backgrounded. */
+private const val MINIMIZED_POLL_INTERVAL_MS = 250L
 
 /** Sentinel entry prepended so auto-scroll has headroom above the first line. */
 private val HEAD_LYRICS_ENTRY = LyricsEntry(time = 0L, text = "")
@@ -238,27 +249,80 @@ fun LyricsV2(
     var playbackPositionMs by remember { mutableLongStateOf(0L) }
     var currentLineIndex by remember { mutableIntStateOf(0) }
 
-    LaunchedEffect(entriesWithWords, isSynced, leadMs, lyricsSyncOffset) {
+    // ── Lifecycle gate ──
+    // Stops the high-frequency position loop while the app is not in the
+    // foreground. When ON_START fires, the effect restarts and the very
+    // first iteration reads player.currentPosition, so no reconciliation
+    // is needed — the loop simply picks up where the player actually is.
+    var isAppMinimized by remember { mutableStateOf(false) }
+    val lyricsLifecycleOwner = LocalLifecycleOwner.current
+    DisposableEffect(lyricsLifecycleOwner) {
+        val observer =
+            LifecycleEventObserver { _, event ->
+                when (event) {
+                    Lifecycle.Event.ON_STOP -> isAppMinimized = true
+                    Lifecycle.Event.ON_START -> isAppMinimized = false
+                    else -> Unit
+                }
+            }
+        lyricsLifecycleOwner.lifecycle.addObserver(observer)
+        onDispose { lyricsLifecycleOwner.lifecycle.removeObserver(observer) }
+    }
+
+    LaunchedEffect(entriesWithWords, isSynced, leadMs, lyricsSyncOffset, isAppMinimized) {
         if (!isSynced || entriesWithWords.isEmpty()) return@LaunchedEffect
-        val pollIntervalMs = if (isWordSyncedFormat) 16L else 50L
         while (isActive) {
+            if (isAppMinimized) {
+                // Background: keep the coroutine alive but stop doing work.
+                delay(MINIMIZED_POLL_INTERVAL_MS)
+                continue
+            }
+
+            if (isWordSyncedFormat) {
+                // Frame-aligned polling for word-level karaoke. Using
+                // withFrameNanos instead of delay(16) ties the update to the
+                // render pipeline so we never tick more often than the
+                // display can actually consume.
+                withFrameNanos { }
+            } else {
+                delay(LINE_SYNC_POLL_INTERVAL_MS)
+            }
+
             val sliderPos = sliderPositionProvider()
             val pos = sliderPos ?: player.currentPosition
 
-            playbackPositionMs = (pos + lyricsSyncOffset.toLong()).coerceAtLeast(0L)
-            currentPositionMs = (playbackPositionMs + leadMs).coerceAtLeast(0L)
+            val newPlaybackPositionMs = (pos + lyricsSyncOffset.toLong()).coerceAtLeast(0L)
+            val newCurrentPositionMs = (newPlaybackPositionMs + leadMs).coerceAtLeast(0L)
 
-            currentLineIndex = findCurrentLineIndex(entriesWithWords, currentPositionMs, 0L)
-            delay(pollIntervalMs)
+            if (playbackPositionMs != newPlaybackPositionMs) {
+                playbackPositionMs = newPlaybackPositionMs
+            }
+            if (currentPositionMs != newCurrentPositionMs) {
+                currentPositionMs = newCurrentPositionMs
+            }
+
+            val newLineIndex = findCurrentLineIndex(entriesWithWords, newCurrentPositionMs, 0L)
+            if (currentLineIndex != newLineIndex) {
+                currentLineIndex = newLineIndex
+            }
         }
     }
 
     // ── Scroll State ──
     val listState = rememberLazyListState()
     var isManualScrolling by remember { mutableStateOf(false) }
-    var lastManualScrollTime by remember { mutableLongStateOf(0L) }
 
-    // Detect manual scrolling
+    // Detect manual scrolling.
+    //
+    // The idle-timeout that clears isManualScrolling is driven by a Job
+    // held in a MutableState rather than by a LaunchedEffect keyed on a
+    // timestamp. The previous version wrote System.currentTimeMillis() on
+    // every scroll event, which changed the LaunchedEffect key on every
+    // pixel of scroll and recomposed the entire lyrics list per frame
+    // during the gesture.
+    val manualScrollResetJob = remember { mutableStateOf<Job?>(null) }
+    val manualScrollResetScope = rememberCoroutineScope()
+
     val nestedScrollConnection =
         remember {
             object : NestedScrollConnection {
@@ -268,20 +332,17 @@ fun LyricsV2(
                 ): Offset {
                     if (!isSelectionModeActive && source == NestedScrollSource.UserInput) {
                         isManualScrolling = true
-                        lastManualScrollTime = System.currentTimeMillis()
+                        manualScrollResetJob.value?.cancel()
+                        manualScrollResetJob.value =
+                            manualScrollResetScope.launch {
+                                delay(MANUAL_SCROLL_TIMEOUT_MS)
+                                isManualScrolling = false
+                            }
                     }
                     return Offset.Zero
                 }
             }
         }
-
-    // Resume auto-scroll after timeout
-    LaunchedEffect(isManualScrolling, lastManualScrollTime) {
-        if (isManualScrolling) {
-            delay(MANUAL_SCROLL_TIMEOUT_MS)
-            isManualScrolling = false
-        }
-    }
 
     // Auto-scroll to active line
     LaunchedEffect(currentLineIndex, isManualScrolling, lyricsScroll) {
@@ -756,11 +817,24 @@ fun LyricsV2(
                         }
 
                         if (item.words != null && isSynced) {
+                            // Only the active line needs a live position feed for
+                            // word-level karaoke. Lines above are fully past
+                            // (all words complete); lines below have not started
+                            // (no word active). Passing a sentinel value for
+                            // those cases means the item lambda never reads
+                            // `currentPositionMs` unless it is the active line,
+                            // so it is not invalidated ~60x/second.
+                            val linePositionMs =
+                                when {
+                                    isActive -> currentPositionMs
+                                    isPast -> Long.MAX_VALUE
+                                    else -> 0L
+                                }
                             LyricsLineV2(
                                 words = item.words!!,
                                 isActive = isActive,
                                 isPast = isPast,
-                                currentPositionMs = currentPositionMs,
+                                currentPositionMs = linePositionMs,
                                 textColor = textColor,
                                 inactiveAlpha = inactiveAlpha,
                                 baseFontSize = lyricsTextSize,
