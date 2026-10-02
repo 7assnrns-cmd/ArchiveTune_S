@@ -14,6 +14,7 @@ import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
@@ -67,7 +68,7 @@ class LyricsRenderViewModel
             if (mediaChanged) _state.value = LyricsRenderScreenState.Loading
             observationJob =
                 viewModelScope.launch {
-                    prepareLyrics.observe(nextBinding.mediaId, nextBinding.durationMs).collect { result ->
+                    prepareLyrics.observe(nextBinding.mediaId, nextBinding.durationMs).collectLatest { result ->
                         _state.value =
                             result.fold(
                                 onSuccess = { lyrics ->
@@ -85,6 +86,13 @@ class LyricsRenderViewModel
                             )
                     }
                 }
+        }
+
+        fun cancel() {
+            observationJob?.cancel()
+            observationJob = null
+            binding = null
+            _state.value = LyricsRenderScreenState.Empty
         }
 
         private data class Binding(

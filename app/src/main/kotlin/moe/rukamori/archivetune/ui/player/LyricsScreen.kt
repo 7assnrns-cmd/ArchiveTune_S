@@ -50,6 +50,7 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -250,6 +251,12 @@ fun LyricsScreen(
     val lyricsDurationMs = durationState.longValue.takeIf { it != C.TIME_UNSET } ?: 0L
     LaunchedEffect(mediaMetadata.id, lyricsDurationMs) {
         lyricsRenderViewModel.bind(mediaMetadata.id, lyricsDurationMs)
+    }
+
+    DisposableEffect(lyricsRenderViewModel) {
+        onDispose {
+            lyricsRenderViewModel.cancel()
+        }
     }
 
     val gradientColorsCache =
