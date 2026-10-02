@@ -810,11 +810,24 @@ fun LyricsV2(
                         }
 
                         if (item.words != null && isSynced) {
+                            // Only the active line needs a live position feed for
+                            // word-level karaoke. Lines above are fully past
+                            // (all words complete); lines below have not started
+                            // (no word active). Passing a sentinel value for
+                            // those cases means the item lambda never reads
+                            // `currentPositionMs` unless it is the active line,
+                            // so it is not invalidated ~60x/second.
+                            val linePositionMs =
+                                when {
+                                    isActive -> currentPositionMs
+                                    isPast -> Long.MAX_VALUE
+                                    else -> 0L
+                                }
                             LyricsLineV2(
                                 words = item.words!!,
                                 isActive = isActive,
                                 isPast = isPast,
-                                currentPositionMs = currentPositionMs,
+                                currentPositionMs = linePositionMs,
                                 textColor = textColor,
                                 inactiveAlpha = inactiveAlpha,
                                 baseFontSize = lyricsTextSize,
