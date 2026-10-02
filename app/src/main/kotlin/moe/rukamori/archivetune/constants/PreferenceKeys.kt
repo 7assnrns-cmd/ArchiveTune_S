@@ -784,6 +784,16 @@ val LyricsTextColorCustomKey = stringPreferencesKey("lyricsTextColorCustom")
 val LyricsInactiveLineAlphaKey = floatPreferencesKey("lyricsInactiveLineAlpha")
 val LyricsTextContrastGuardKey = booleanPreferencesKey("lyricsTextContrastGuard")
 
+// Contrast guard tuning
+val LyricsContrastThresholdKey = floatPreferencesKey("lyricsContrastThreshold")
+val LyricsContrastBlendStrengthKey = floatPreferencesKey("lyricsContrastBlendStrength")
+
+// Translation style (applies to the translation / romanization line)
+val LyricsTranslationScaleKey = floatPreferencesKey("lyricsTranslationScale")
+val LyricsTranslationLineHeightScaleKey = floatPreferencesKey("lyricsTranslationLineHeightScale")
+val LyricsTranslationAlphaKey = floatPreferencesKey("lyricsTranslationAlpha")
+val LyricsTranslationItalicKey = booleanPreferencesKey("lyricsTranslationItalic")
+
 val PlayerVolumeKey = floatPreferencesKey("playerVolume")
 val RepeatModeKey = intPreferencesKey("repeatMode")
 val SponsorBlockEnabledKey = booleanPreferencesKey("sponsorBlockEnabled")

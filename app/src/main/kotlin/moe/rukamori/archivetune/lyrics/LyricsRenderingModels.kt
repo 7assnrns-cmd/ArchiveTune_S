@@ -120,6 +120,14 @@ data class LyricsRenderingPreferences(
     val textColorCustom: Color?,
     val inactiveLineAlpha: Float,
     val textContrastGuard: Boolean,
+    // Contrast guard tuning
+    val contrastThreshold: Float,
+    val contrastBlendStrength: Float,
+    // Translation style
+    val translationScale: Float,
+    val translationLineHeightScale: Float,
+    val translationAlpha: Float,
+    val translationItalic: Boolean,
 )
 
 @Immutable

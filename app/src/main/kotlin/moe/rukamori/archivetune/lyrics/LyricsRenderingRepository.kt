@@ -39,6 +39,12 @@ import moe.rukamori.archivetune.constants.LyricsSmoothPlaybackKey
 import moe.rukamori.archivetune.constants.LyricsTextColorCustomKey
 import moe.rukamori.archivetune.constants.LyricsTextColorModeKey
 import moe.rukamori.archivetune.constants.LyricsTextContrastGuardKey
+import moe.rukamori.archivetune.constants.LyricsContrastBlendStrengthKey
+import moe.rukamori.archivetune.constants.LyricsContrastThresholdKey
+import moe.rukamori.archivetune.constants.LyricsTranslationAlphaKey
+import moe.rukamori.archivetune.constants.LyricsTranslationItalicKey
+import moe.rukamori.archivetune.constants.LyricsTranslationLineHeightScaleKey
+import moe.rukamori.archivetune.constants.LyricsTranslationScaleKey
 import moe.rukamori.archivetune.constants.LyricsTranslationOverrideKey
 import moe.rukamori.archivetune.constants.LyricsViewportOffsetFractionKey
 import moe.rukamori.archivetune.db.MusicDatabase
@@ -107,6 +113,17 @@ class LyricsRenderingRepository
                         inactiveLineAlpha =
                             (values[LyricsInactiveLineAlphaKey] ?: 0.35f).coerceIn(0.05f, 0.95f),
                         textContrastGuard = values[LyricsTextContrastGuardKey] ?: true,
+                        contrastThreshold =
+                            (values[LyricsContrastThresholdKey] ?: 4.5f).coerceIn(3f, 7f),
+                        contrastBlendStrength =
+                            (values[LyricsContrastBlendStrengthKey] ?: 0.6f).coerceIn(0.3f, 1f),
+                        translationScale =
+                            (values[LyricsTranslationScaleKey] ?: 0.55f).coerceIn(0.3f, 1f),
+                        translationLineHeightScale =
+                            (values[LyricsTranslationLineHeightScaleKey] ?: 0.75f).coerceIn(0.5f, 1.5f),
+                        translationAlpha =
+                            (values[LyricsTranslationAlphaKey] ?: 0.76f).coerceIn(0.3f, 1f),
+                        translationItalic = values[LyricsTranslationItalicKey] ?: false,
                     )
                 }.distinctUntilChanged()
 

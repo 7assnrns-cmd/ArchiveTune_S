@@ -105,6 +105,12 @@ import moe.rukamori.archivetune.constants.LyricsPhoneticOverrideKey
 import moe.rukamori.archivetune.constants.LyricsSelectionLimitKey
 import moe.rukamori.archivetune.constants.LyricsSmoothPlaybackKey
 import moe.rukamori.archivetune.constants.LyricsTextColorModeKey
+import moe.rukamori.archivetune.constants.LyricsContrastBlendStrengthKey
+import moe.rukamori.archivetune.constants.LyricsContrastThresholdKey
+import moe.rukamori.archivetune.constants.LyricsTranslationAlphaKey
+import moe.rukamori.archivetune.constants.LyricsTranslationItalicKey
+import moe.rukamori.archivetune.constants.LyricsTranslationLineHeightScaleKey
+import moe.rukamori.archivetune.constants.LyricsTranslationScaleKey
 import moe.rukamori.archivetune.constants.LyricsTextColorCustomKey
 import moe.rukamori.archivetune.constants.LyricsTextContrastGuardKey
 import moe.rukamori.archivetune.constants.LyricsTranslationOverrideKey
@@ -264,6 +270,18 @@ fun LyricsSettings(
         rememberPreference(LyricsInactiveLineAlphaKey, defaultValue = 0.35f)
     val (textContrastGuard, onTextContrastGuardChange) =
         rememberPreference(LyricsTextContrastGuardKey, defaultValue = true)
+    val (contrastThreshold, onContrastThresholdChange) =
+        rememberPreference(LyricsContrastThresholdKey, defaultValue = 4.5f)
+    val (contrastBlendStrength, onContrastBlendStrengthChange) =
+        rememberPreference(LyricsContrastBlendStrengthKey, defaultValue = 0.6f)
+    val (translationScale, onTranslationScaleChange) =
+        rememberPreference(LyricsTranslationScaleKey, defaultValue = 0.55f)
+    val (translationLineHeightScale, onTranslationLineHeightScaleChange) =
+        rememberPreference(LyricsTranslationLineHeightScaleKey, defaultValue = 0.75f)
+    val (translationAlpha, onTranslationAlphaChange) =
+        rememberPreference(LyricsTranslationAlphaKey, defaultValue = 0.76f)
+    val (translationItalic, onTranslationItalicChange) =
+        rememberPreference(LyricsTranslationItalicKey, defaultValue = false)
 
     if (showCustomColorDialog) {
         val keyboardOptions =
@@ -752,6 +770,98 @@ fun LyricsSettings(
                     icon = { Icon(painterResource(R.drawable.lyrics), null) },
                     checked = textContrastGuard,
                     onCheckedChange = onTextContrastGuardChange,
+                )
+            }
+
+            if (textContrastGuard) {
+                item {
+                    PreferenceEntry(
+                        title = { Text("Contrast threshold") },
+                        description = "%.1f:1 (WCAG AA is 4.5)".format(contrastThreshold),
+                        icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                        content = {
+                            Slider(
+                                value = contrastThreshold,
+                                onValueChange = onContrastThresholdChange,
+                                valueRange = 3.0f..7.0f,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        },
+                    )
+                }
+
+                item {
+                    PreferenceEntry(
+                        title = { Text("Blend strength") },
+                        description = "${(contrastBlendStrength * 100).toInt()}% toward white/black",
+                        icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                        content = {
+                            Slider(
+                                value = contrastBlendStrength,
+                                onValueChange = onContrastBlendStrengthChange,
+                                valueRange = 0.3f..1.0f,
+                                modifier = Modifier.fillMaxWidth(),
+                            )
+                        },
+                    )
+                }
+            }
+
+            // ── Translation style ──
+            item {
+                PreferenceEntry(
+                    title = { Text("Translation size") },
+                    description = "${(translationScale * 100).toInt()}% of lyric size",
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    content = {
+                        Slider(
+                            value = translationScale,
+                            onValueChange = onTranslationScaleChange,
+                            valueRange = 0.3f..1.0f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Translation line height") },
+                    description = "%.2fx of lyric size".format(translationLineHeightScale),
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    content = {
+                        Slider(
+                            value = translationLineHeightScale,
+                            onValueChange = onTranslationLineHeightScaleChange,
+                            valueRange = 0.5f..1.5f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Translation opacity") },
+                    description = "${(translationAlpha * 100).toInt()}%",
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    content = {
+                        Slider(
+                            value = translationAlpha,
+                            onValueChange = onTranslationAlphaChange,
+                            valueRange = 0.3f..1.0f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    title = { Text("Translation italic") },
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    checked = translationItalic,
+                    onCheckedChange = onTranslationItalicChange,
                 )
             }
         }

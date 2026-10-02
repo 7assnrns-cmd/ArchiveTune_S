@@ -231,6 +231,18 @@ fun LyricsScreen(
             ?.preferences
             ?.textContrastGuard
             ?: true
+    val contrastThreshold =
+        (lyricsRenderState as? LyricsRenderScreenState.Success)
+            ?.lyrics
+            ?.preferences
+            ?.contrastThreshold
+            ?: 4.5f
+    val contrastBlendStrength =
+        (lyricsRenderState as? LyricsRenderScreenState.Success)
+            ?.lyrics
+            ?.preferences
+            ?.contrastBlendStrength
+            ?: 0.6f
     // The actual foregroundColor derivation lives below, after
     // gradientColors is declared, since it reads that state.
     val showPlayerControlsState =
@@ -301,7 +313,7 @@ fun LyricsScreen(
     // because it reads gradientColors, which is declared immediately
     // above.
     val foregroundColor =
-        remember(rawForegroundColor, gradientColors, guardEnabled) {
+        remember(rawForegroundColor, gradientColors, guardEnabled, contrastThreshold, contrastBlendStrength) {
             if (!guardEnabled || gradientColors.isEmpty()) {
                 return@remember rawForegroundColor
             }
@@ -319,13 +331,14 @@ fun LyricsScreen(
                 } else {
                     (fgLum + 0.05f) / (bgLum + 0.05f)
                 }
-            if (contrastRatio >= 4.5f) return@remember rawForegroundColor
-            // Nudge toward whichever endpoint is farther from the
-            // background. Blend 60% toward that endpoint — enough to
-            // clear the threshold in the vast majority of cases without
-            // losing the identity of the original colour.
+            if (contrastRatio >= contrastThreshold) return@remember rawForegroundColor
+            // Blend toward whichever endpoint is farther from the
+            // background. Blend strength is user-tunable (default 0.6)
+            // so the user can prefer maximum legibility (1.0 = full
+            // white/black) or maximum colour identity (0.3 = minimal
+            // nudge).
             val target = if (bgLum > 0.5f) Color.Black else Color.White
-            androidx.compose.ui.graphics.lerp(rawForegroundColor, target, 0.6f)
+            androidx.compose.ui.graphics.lerp(rawForegroundColor, target, contrastBlendStrength)
         }
 
     val lyricsDurationMs = durationState.longValue.takeIf { it != C.TIME_UNSET } ?: 0L
