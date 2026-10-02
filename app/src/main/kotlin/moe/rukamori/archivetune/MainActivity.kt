@@ -273,6 +273,7 @@ import moe.rukamori.archivetune.ui.component.COLLAPSED_ANCHOR
 import moe.rukamori.archivetune.ui.component.DISMISSED_ANCHOR
 import moe.rukamori.archivetune.ui.component.EXPANDED_ANCHOR
 import moe.rukamori.archivetune.ui.component.FloatingNavigationToolbar
+import moe.rukamori.archivetune.ui.component.FpsOverlay
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.LocalBottomSheetPageState
 import moe.rukamori.archivetune.ui.component.LocalMenuState
@@ -2740,6 +2741,20 @@ class MainActivity : ComponentActivity() {
                                         start = 16.dp,
                                         end = 16.dp,
                                     ).zIndex(10f),
+                        )
+
+                        // Developer FPS overlay. Sits above the bottom
+                        // navigation area and the mini player so it stays
+                        // visible regardless of what the user is doing.
+                        // Hidden entirely unless the preference is on.
+                        FpsOverlay(
+                            modifier =
+                                Modifier
+                                    .align(Alignment.BottomStart)
+                                    .padding(
+                                        start = 12.dp,
+                                        bottom = bottomInset + 12.dp,
+                                    ).zIndex(20f),
                         )
                     }
 

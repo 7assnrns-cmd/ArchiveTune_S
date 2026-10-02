@@ -84,12 +84,16 @@ import moe.rukamori.archivetune.ui.component.PreferenceGroup
 import moe.rukamori.archivetune.ui.component.SwitchPreference
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.makeTimeString
+import moe.rukamori.archivetune.constants.DeveloperFpsOverlayKey
 import moe.rukamori.archivetune.utils.rememberPreference
 import kotlin.math.roundToInt
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun DebugSettings(navController: NavController) {
+    val (fpsOverlayEnabled, onFpsOverlayChange) =
+        rememberPreference(DeveloperFpsOverlayKey, defaultValue = false)
+
     val (showDevDebug, onShowDevDebugChange) =
         rememberPreference(
             key = booleanPreferencesKey("dev_show_discord_debug"),
@@ -183,6 +187,16 @@ fun DebugSettings(navController: NavController) {
                         icon = { Icon(painterResource(R.drawable.graphic_eq), null) },
                         checked = showCodecOnPlayer,
                         onCheckedChange = onShowCodecOnPlayerChange,
+                    )
+                }
+
+                item {
+                    SwitchPreference(
+                        title = { Text("FPS overlay") },
+                        description = "Show real-time frame rate in the bottom-left corner",
+                        icon = { Icon(painterResource(R.drawable.experiment), null) },
+                        checked = fpsOverlayEnabled,
+                        onCheckedChange = onFpsOverlayChange,
                     )
                 }
 

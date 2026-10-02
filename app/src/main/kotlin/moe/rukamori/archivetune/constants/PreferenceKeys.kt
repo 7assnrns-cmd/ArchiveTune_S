@@ -24,6 +24,9 @@ val CustomThemeColorKey = stringPreferencesKey("customThemeColor")
 val RandomThemeOnStartupKey = booleanPreferencesKey("randomThemeOnStartup")
 val DarkModeKey = stringPreferencesKey("darkMode")
 val PureBlackKey = booleanPreferencesKey("pureBlack")
+
+// Developer FPS overlay in the bottom-left corner
+val DeveloperFpsOverlayKey = booleanPreferencesKey("developerFpsOverlay")
 val DisableAnimationsKey = booleanPreferencesKey("disableAnimations")
 val ForceHighRefreshRateKey = booleanPreferencesKey("forceHighRefreshRate")
 val WallpaperExtractionFailedKey = booleanPreferencesKey("wallpaperExtractionFailed")
