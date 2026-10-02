@@ -95,7 +95,23 @@ import moe.rukamori.archivetune.constants.LyricsRomanizeKoreanKey
 import moe.rukamori.archivetune.constants.LyricsRomanizeOtherLanguagesKey
 import moe.rukamori.archivetune.constants.LyricsScrollKey
 import moe.rukamori.archivetune.constants.LyricsTextSizeKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedAccompanimentScaleKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedFontWeightKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedLineSpacingKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedPhoneticScaleKey
+import moe.rukamori.archivetune.constants.LyricsInactiveLineAlphaKey
+import moe.rukamori.archivetune.constants.LyricsKeepAliveZoneDpKey
+import moe.rukamori.archivetune.constants.LyricsPhoneticOverrideKey
+import moe.rukamori.archivetune.constants.LyricsSelectionLimitKey
+import moe.rukamori.archivetune.constants.LyricsSmoothPlaybackKey
+import moe.rukamori.archivetune.constants.LyricsTextColorModeKey
+import moe.rukamori.archivetune.constants.LyricsTextContrastGuardKey
+import moe.rukamori.archivetune.constants.LyricsTranslationOverrideKey
+import moe.rukamori.archivetune.constants.LyricsViewportOffsetFractionKey
 import moe.rukamori.archivetune.constants.PaxsenixApiKeyKey
+import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
+import moe.rukamori.archivetune.lyrics.LyricsTextColorMode
+import moe.rukamori.archivetune.lyrics.LyricsVisibilityOverride
 import moe.rukamori.archivetune.constants.PreferredLyricsProvider
 import moe.rukamori.archivetune.constants.deserializeLyricsProviderOrder
 import moe.rukamori.archivetune.paxsenix.PaxsenixLyrics
@@ -210,6 +226,40 @@ fun LyricsSettings(
             LyricsRomanizeOtherLanguagesKey,
             defaultValue = true,
         )
+
+    // Enhanced — text visual scale
+    val (enhancedAccompanimentScale, onEnhancedAccompanimentScaleChange) =
+        rememberPreference(LyricsEnhancedAccompanimentScaleKey, defaultValue = 0.82f)
+    val (enhancedPhoneticScale, onEnhancedPhoneticScaleChange) =
+        rememberPreference(LyricsEnhancedPhoneticScaleKey, defaultValue = 0.55f)
+    val (enhancedLineSpacing, onEnhancedLineSpacingChange) =
+        rememberPreference(LyricsEnhancedLineSpacingKey, defaultValue = 1.3f)
+    val (enhancedFontWeight, onEnhancedFontWeightChange) =
+        rememberEnumPreference(LyricsEnhancedFontWeightKey, defaultValue = LyricsEnhancedFontWeight.BOLD)
+
+    // Enhanced — layout
+    val (viewportOffsetFraction, onViewportOffsetFractionChange) =
+        rememberPreference(LyricsViewportOffsetFractionKey, defaultValue = 0.38f)
+    val (keepAliveZoneDp, onKeepAliveZoneDpChange) =
+        rememberPreference(LyricsKeepAliveZoneDpKey, defaultValue = 72)
+    val (selectionLimit, onSelectionLimitChange) =
+        rememberPreference(LyricsSelectionLimitKey, defaultValue = 5)
+
+    // Enhanced — display overrides
+    val (translationOverride, onTranslationOverrideChange) =
+        rememberEnumPreference(LyricsTranslationOverrideKey, defaultValue = LyricsVisibilityOverride.AUTO)
+    val (phoneticOverride, onPhoneticOverrideChange) =
+        rememberEnumPreference(LyricsPhoneticOverrideKey, defaultValue = LyricsVisibilityOverride.AUTO)
+    val (smoothPlaybackEnabled, onSmoothPlaybackChange) =
+        rememberPreference(LyricsSmoothPlaybackKey, defaultValue = true)
+
+    // Text colour (merged with dynamic theme)
+    val (textColorMode, onTextColorModeChange) =
+        rememberEnumPreference(LyricsTextColorModeKey, defaultValue = LyricsTextColorMode.DEFAULT)
+    val (inactiveLineAlpha, onInactiveLineAlphaChange) =
+        rememberPreference(LyricsInactiveLineAlphaKey, defaultValue = 0.35f)
+    val (textContrastGuard, onTextContrastGuardChange) =
+        rememberPreference(LyricsTextContrastGuardKey, defaultValue = true)
 
     if (showPaxsenixApiKeyDialog) {
         val passwordVisualTransformation = remember { PasswordVisualTransformation() }
@@ -459,6 +509,208 @@ fun LyricsSettings(
                     description = "${String.format("%.1f", lyricsLineSpacing)}x",
                     icon = { Icon(painterResource(R.drawable.text_fields), null) },
                     onClick = { showLyricsLineSpacingDialog = true },
+                )
+            }
+        }
+
+        PreferenceGroup(title = "Lyrics Customization") {
+
+            // ── Text visual scale ──
+            item {
+                PreferenceEntry(
+                    title = { Text("Accompaniment size") },
+                    description = "${(enhancedAccompanimentScale * 100).toInt()}%",
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    content = {
+                        Slider(
+                            value = enhancedAccompanimentScale,
+                            onValueChange = onEnhancedAccompanimentScaleChange,
+                            valueRange = 0.5f..1.0f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Phonetic size") },
+                    description = "${(enhancedPhoneticScale * 100).toInt()}%",
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    content = {
+                        Slider(
+                            value = enhancedPhoneticScale,
+                            onValueChange = onEnhancedPhoneticScaleChange,
+                            valueRange = 0.3f..0.8f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Enhanced line spacing") },
+                    description = String.format("%.2fx", enhancedLineSpacing),
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    content = {
+                        Slider(
+                            value = enhancedLineSpacing,
+                            onValueChange = onEnhancedLineSpacingChange,
+                            valueRange = 0.8f..2.0f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                EnumListPreference(
+                    title = { Text("Active line font weight") },
+                    icon = { Icon(painterResource(R.drawable.text_fields), null) },
+                    selectedValue = enhancedFontWeight,
+                    onValueSelected = onEnhancedFontWeightChange,
+                    valueText = {
+                        when (it) {
+                            LyricsEnhancedFontWeight.SEMI_BOLD -> "Semi Bold"
+                            LyricsEnhancedFontWeight.BOLD -> "Bold"
+                            LyricsEnhancedFontWeight.EXTRA_BOLD -> "Extra Bold"
+                        }
+                    },
+                )
+            }
+
+            // ── Layout ──
+            item {
+                PreferenceEntry(
+                    title = { Text("Active line vertical position") },
+                    description = "${(viewportOffsetFraction * 100).toInt()}% from top",
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    content = {
+                        Slider(
+                            value = viewportOffsetFraction,
+                            onValueChange = onViewportOffsetFractionChange,
+                            valueRange = 0.2f..0.5f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Keep-alive zone") },
+                    description = "$keepAliveZoneDp dp",
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    content = {
+                        Slider(
+                            value = keepAliveZoneDp.toFloat(),
+                            onValueChange = { onKeepAliveZoneDpChange(it.roundToInt()) },
+                            valueRange = 0f..200f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Max selection count") },
+                    description = "$selectionLimit lines",
+                    icon = { Icon(painterResource(R.drawable.share), null) },
+                    content = {
+                        Slider(
+                            value = selectionLimit.toFloat(),
+                            onValueChange = { onSelectionLimitChange(it.roundToInt()) },
+                            valueRange = 1f..20f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            // ── Display overrides ──
+            item {
+                EnumListPreference(
+                    title = { Text("Translations") },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    selectedValue = translationOverride,
+                    onValueSelected = onTranslationOverrideChange,
+                    valueText = {
+                        when (it) {
+                            LyricsVisibilityOverride.AUTO -> "Auto"
+                            LyricsVisibilityOverride.ALWAYS_ON -> "Always on"
+                            LyricsVisibilityOverride.ALWAYS_OFF -> "Off"
+                        }
+                    },
+                )
+            }
+
+            item {
+                EnumListPreference(
+                    title = { Text("Phonetics") },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    selectedValue = phoneticOverride,
+                    onValueSelected = onPhoneticOverrideChange,
+                    valueText = {
+                        when (it) {
+                            LyricsVisibilityOverride.AUTO -> "Auto"
+                            LyricsVisibilityOverride.ALWAYS_ON -> "Always on"
+                            LyricsVisibilityOverride.ALWAYS_OFF -> "Off"
+                        }
+                    },
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    title = { Text("Smooth playback") },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    checked = smoothPlaybackEnabled,
+                    onCheckedChange = onSmoothPlaybackChange,
+                )
+            }
+
+            // ── Text colour ──
+            item {
+                EnumListPreference(
+                    title = { Text("Text colour mode") },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    selectedValue = textColorMode,
+                    onValueSelected = onTextColorModeChange,
+                    valueText = {
+                        when (it) {
+                            LyricsTextColorMode.DEFAULT -> "Default"
+                            LyricsTextColorMode.DYNAMIC_THEME_PRIMARY -> "Dynamic theme (primary)"
+                            LyricsTextColorMode.DYNAMIC_THEME_TERTIARY -> "Dynamic theme (tertiary)"
+                            LyricsTextColorMode.CUSTOM -> "Custom"
+                        }
+                    },
+                )
+            }
+
+            item {
+                PreferenceEntry(
+                    title = { Text("Inactive line alpha") },
+                    description = "${(inactiveLineAlpha * 100).toInt()}%",
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    content = {
+                        Slider(
+                            value = inactiveLineAlpha,
+                            onValueChange = onInactiveLineAlphaChange,
+                            valueRange = 0.05f..0.95f,
+                            modifier = Modifier.fillMaxWidth(),
+                        )
+                    },
+                )
+            }
+
+            item {
+                SwitchPreference(
+                    title = { Text("Contrast guard") },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    checked = textContrastGuard,
+                    onCheckedChange = onTextContrastGuardChange,
                 )
             }
         }
