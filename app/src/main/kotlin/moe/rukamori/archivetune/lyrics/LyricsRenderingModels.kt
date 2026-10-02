@@ -8,6 +8,7 @@
 package moe.rukamori.archivetune.lyrics
 
 import androidx.compose.runtime.Immutable
+import androidx.compose.ui.graphics.Color
 import com.google.common.collect.ImmutableList
 
 enum class LyricsSyncType {
@@ -32,6 +33,25 @@ enum class LyricsLineAlignment {
 enum class LyricsTextDirection {
     LTR,
     RTL,
+}
+
+enum class LyricsEnhancedFontWeight {
+    SEMI_BOLD,
+    BOLD,
+    EXTRA_BOLD,
+}
+
+enum class LyricsVisibilityOverride {
+    AUTO,
+    ALWAYS_ON,
+    ALWAYS_OFF,
+}
+
+enum class LyricsTextColorMode {
+    DEFAULT,
+    DYNAMIC_THEME_PRIMARY,
+    DYNAMIC_THEME_TERTIARY,
+    CUSTOM,
 }
 
 @Immutable
@@ -82,6 +102,24 @@ data class LyricsRenderingPreferences(
     val v2FillTransitionWidthDp: Float,
     val v2LrcBounceEnabled: Boolean,
     val romanization: LyricsRomanizationPreferences,
+    // Enhanced — text visual scale
+    val enhancedAccompanimentScale: Float,
+    val enhancedPhoneticScale: Float,
+    val enhancedLineSpacing: Float,
+    val enhancedFontWeight: LyricsEnhancedFontWeight,
+    // Enhanced — layout
+    val viewportOffsetFraction: Float,
+    val keepAliveZoneDp: Int,
+    val selectionLimit: Int,
+    // Enhanced — display overrides
+    val translationOverride: LyricsVisibilityOverride,
+    val phoneticOverride: LyricsVisibilityOverride,
+    val smoothPlaybackEnabled: Boolean,
+    // Text colour (merged with dynamic theme)
+    val textColorMode: LyricsTextColorMode,
+    val textColorCustom: Color?,
+    val inactiveLineAlpha: Float,
+    val textContrastGuard: Boolean,
 )
 
 @Immutable

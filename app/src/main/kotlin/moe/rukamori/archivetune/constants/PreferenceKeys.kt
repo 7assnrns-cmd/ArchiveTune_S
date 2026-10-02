@@ -762,6 +762,28 @@ val LyricsV2GlowFactorKey = floatPreferencesKey("lyricsV2GlowFactor")
 val LyricsV2FillTransitionWidthKey = floatPreferencesKey("lyricsV2FillTransitionWidth")
 val LyricsV2LrcBounceEnabledKey = booleanPreferencesKey("lyricsV2LrcBounceEnabled")
 
+// Enhanced — text visual scale
+val LyricsEnhancedAccompanimentScaleKey = floatPreferencesKey("lyricsEnhancedAccompanimentScale")
+val LyricsEnhancedPhoneticScaleKey = floatPreferencesKey("lyricsEnhancedPhoneticScale")
+val LyricsEnhancedLineSpacingKey = floatPreferencesKey("lyricsEnhancedLineSpacing")
+val LyricsEnhancedFontWeightKey = stringPreferencesKey("lyricsEnhancedFontWeight")
+
+// Enhanced — layout
+val LyricsViewportOffsetFractionKey = floatPreferencesKey("lyricsViewportOffsetFraction")
+val LyricsKeepAliveZoneDpKey = intPreferencesKey("lyricsKeepAliveZoneDp")
+val LyricsSelectionLimitKey = intPreferencesKey("lyricsSelectionLimit")
+
+// Enhanced — display overrides
+val LyricsTranslationOverrideKey = stringPreferencesKey("lyricsTranslationOverride")
+val LyricsPhoneticOverrideKey = stringPreferencesKey("lyricsPhoneticOverride")
+val LyricsSmoothPlaybackKey = booleanPreferencesKey("lyricsSmoothPlayback")
+
+// Lyrics text colour (merged with dynamic theme)
+val LyricsTextColorModeKey = stringPreferencesKey("lyricsTextColorMode")
+val LyricsTextColorCustomKey = stringPreferencesKey("lyricsTextColorCustom")
+val LyricsInactiveLineAlphaKey = floatPreferencesKey("lyricsInactiveLineAlpha")
+val LyricsTextContrastGuardKey = booleanPreferencesKey("lyricsTextContrastGuard")
+
 val PlayerVolumeKey = floatPreferencesKey("playerVolume")
 val RepeatModeKey = intPreferencesKey("repeatMode")
 val SponsorBlockEnabledKey = booleanPreferencesKey("sponsorBlockEnabled")
