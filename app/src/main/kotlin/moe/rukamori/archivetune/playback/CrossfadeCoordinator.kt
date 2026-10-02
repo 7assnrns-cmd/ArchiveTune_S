@@ -7,7 +7,7 @@
 
 package moe.rukamori.archivetune.playback
 
-import androidx.media3.common.ExoPlayer
+import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import kotlinx.coroutines.flow.MutableStateFlow
