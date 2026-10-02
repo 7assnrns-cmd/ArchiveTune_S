@@ -6828,7 +6828,15 @@ private data class PendingCrossfadeQueueSwap(
 
         val sessionId = localPlayer.audioSessionId
         if (sessionId > 0) {
-            rebindAudioEffectSession(sessionId)
+            // Only rebind when the audio session id actually changed.
+            // ExoPlayer briefly flips STATE_BUFFERING during a seek
+            // without changing the session; rebinding in that window
+            // tears down and rebuilds four AudioEffect instances,
+            // which is a large part of the post-seek stutter users see
+            // even on fully downloaded songs.
+            if (sessionId != openedAudioSessionId) {
+                rebindAudioEffectSession(sessionId)
+            }
         }
     }
 
@@ -6860,7 +6868,12 @@ private data class PendingCrossfadeQueueSwap(
             return
         }
         if (oldSessionId == newSessionId) {
-            ensureAudioEffects(newSessionId)
+            // Same session — nothing to rebind. The previous
+            // implementation called ensureAudioEffects() here, which
+            // would recreate the four effect instances on every
+            // reconciliation. Sessions do not change on a normal
+            // seek, so this branch is the hot path and must stay
+            // free of side effects.
             return
         }
 
@@ -8431,6 +8444,14 @@ private data class PendingCrossfadeQueueSwap(
                 .Builder(context)
                 .setEnableFloatOutput(false)
                 .setEnableAudioTrackPlaybackParams(enableAudioTrackPlaybackParams)
+                // Note: buildAudioSink is called once when the renderers
+                // factory is built, not per-seek. AudioProcessor.reset()
+                // runs on every flush, and SonicAudioProcessor in
+                // particular needs to re-prime its resampler after a
+                // seek. That priming is unavoidable for playback-speed
+                // changes, so we keep the chain. The real cost is the
+                // effect-session rebuild guarded in
+                // reconcileAudioEffectSession.
                 .setAudioProcessorChain(
                     DefaultAudioSink.DefaultAudioProcessorChain(
                         SilenceSkippingAudioProcessor(
