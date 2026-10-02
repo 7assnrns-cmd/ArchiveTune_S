@@ -211,7 +211,7 @@ fun LyricsV2(
         }
     val lyricsLineBlur = lyricsLineBlurOverride ?: lyricsLineBlurPreference
 
-    val inactiveAlpha = 0.35f
+    val inactiveAlpha = preferences?.inactiveLineAlpha ?: 0.35f
 
     // ── Selection mode state ──
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }

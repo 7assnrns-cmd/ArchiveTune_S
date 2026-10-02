@@ -104,7 +104,9 @@ import moe.rukamori.archivetune.constants.PlayerBackgroundStyleKey
 import moe.rukamori.archivetune.lyrics.LyricsEntry
 import moe.rukamori.archivetune.lyrics.LyricsSourceFormat
 import moe.rukamori.archivetune.lyrics.LyricsSyncType
+import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
 import moe.rukamori.archivetune.lyrics.LyricsTextDirection
+import moe.rukamori.archivetune.lyrics.LyricsVisibilityOverride
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
 import moe.rukamori.archivetune.lyrics.WordTimestamp
 import moe.rukamori.archivetune.lyrics.toLyricsEntries
@@ -146,6 +148,16 @@ fun LyricsEnhanced(
     val lyricsClick = preferences?.clickEnabled ?: true
     val lyricsTextSize = preferences?.textSizeSp ?: 26f
     val lyricsLineBlurPreference = preferences?.lineBlurEnabled ?: true
+    val enhancedAccompanimentScale = preferences?.enhancedAccompanimentScale ?: 0.82f
+    val enhancedPhoneticScale = preferences?.enhancedPhoneticScale ?: 0.55f
+    val enhancedLineSpacing = preferences?.enhancedLineSpacing ?: 1.3f
+    val enhancedFontWeight = preferences?.enhancedFontWeight ?: LyricsEnhancedFontWeight.BOLD
+    val viewportOffsetFraction = preferences?.viewportOffsetFraction ?: 0.38f
+    val keepAliveZoneDp = preferences?.keepAliveZoneDp ?: 72
+    val selectionLimit = preferences?.selectionLimit ?: 5
+    val translationOverride = preferences?.translationOverride ?: LyricsVisibilityOverride.AUTO
+    val phoneticOverride = preferences?.phoneticOverride ?: LyricsVisibilityOverride.AUTO
+    val smoothPlaybackEnabled = preferences?.smoothPlaybackEnabled ?: true
 
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
 
@@ -161,15 +173,27 @@ fun LyricsEnhanced(
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
     val selectedLineKeys = remember { mutableStateListOf<String>() }
     var showMaxSelectionToast by remember { mutableStateOf(false) }
-    val maxSelectionLimit = 5
+    val maxSelectionLimit = selectionLimit
     var showShareDialog by remember { mutableStateOf(false) }
     var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showShareImageDialog by remember { mutableStateOf(false) }
 
-    val showTranslations =
+    val hasTranslationData =
         preparedLyrics?.lines?.any { line -> line.translation != null } == true
-    val showPhonetics =
+    val showTranslations =
+        when (translationOverride) {
+            LyricsVisibilityOverride.AUTO -> hasTranslationData
+            LyricsVisibilityOverride.ALWAYS_ON -> true
+            LyricsVisibilityOverride.ALWAYS_OFF -> false
+        }
+    val hasPhoneticData =
         preparedLyrics?.lines?.any { line -> line.romanizedText != null || line.phonetics.isNotEmpty() } == true
+    val showPhonetics =
+        when (phoneticOverride) {
+            LyricsVisibilityOverride.AUTO -> hasPhoneticData
+            LyricsVisibilityOverride.ALWAYS_ON -> true
+            LyricsVisibilityOverride.ALWAYS_OFF -> false
+        }
     val baseLayoutDirection = LocalLayoutDirection.current
     val lyricsLayoutDirection =
         remember(preparedLyrics?.lines, baseLayoutDirection) {
@@ -223,6 +247,7 @@ fun LyricsEnhanced(
     val latestLyricsSyncOffset = rememberUpdatedState(lyricsSyncOffset)
     val latestLeadMs = rememberUpdatedState(leadMs)
     val latestPlaybackSpeed = rememberUpdatedState(playbackParameters.speed)
+    val latestSmoothPlaybackEnabled = rememberUpdatedState(smoothPlaybackEnabled)
     val playbackPositionMs =
         remember(player) {
             mutableLongStateOf(player.currentPosition.coerceAtLeast(0L))
@@ -268,7 +293,7 @@ fun LyricsEnhanced(
             }
             val sliderPosition = latestSliderPositionProvider.value()
             val rawPosition = (sliderPosition ?: player.currentPosition).coerceAtLeast(0L)
-            if (sliderPosition != null || !player.isPlaying || animationsDisabled) {
+            if (sliderPosition != null || !player.isPlaying || animationsDisabled || !latestSmoothPlaybackEnabled.value) {
                 smoothedPositionMs = rawPosition.toDouble()
                 previousFrameNanos = 0L
                 if (playbackPositionMs.longValue != rawPosition) {
@@ -353,20 +378,27 @@ fun LyricsEnhanced(
         }
     }
 
+    val activeFontWeight =
+        when (enhancedFontWeight) {
+            LyricsEnhancedFontWeight.SEMI_BOLD -> FontWeight.SemiBold
+            LyricsEnhancedFontWeight.BOLD -> FontWeight.Bold
+            LyricsEnhancedFontWeight.EXTRA_BOLD -> FontWeight.ExtraBold
+        }
     val normalTextStyle =
         MaterialTheme.typography.headlineMedium.copy(
             fontSize = lyricsTextSize.sp,
-            fontWeight = FontWeight.Bold,
+            fontWeight = activeFontWeight,
             fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
+            lineHeight = (lyricsTextSize * enhancedLineSpacing).sp,
         )
     val accompanimentTextStyle =
         MaterialTheme.typography.titleLarge.copy(
-            fontSize = (lyricsTextSize * 0.82f).sp,
+            fontSize = (lyricsTextSize * enhancedAccompanimentScale).sp,
             fontFamily = lyricsFontFamily ?: MaterialTheme.typography.titleLarge.fontFamily,
         )
     val phoneticTextStyle =
         MaterialTheme.typography.bodyMedium.copy(
-            fontSize = (lyricsTextSize * 0.55f).sp,
+            fontSize = (lyricsTextSize * enhancedPhoneticScale).sp,
             fontWeight = FontWeight.Normal,
         )
     val plainLyrics =
@@ -529,7 +561,7 @@ fun LyricsEnhanced(
                 BoxWithConstraints(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    val lyricsViewportOffset = remember(maxHeight) { maxHeight * 0.38f }
+                    val lyricsViewportOffset = remember(maxHeight, viewportOffsetFraction) { maxHeight * viewportOffsetFraction }
 
                     CompositionLocalProvider(LocalLayoutDirection provides lyricsLayoutDirection) {
                         key(lyricsSessionKey, syncedLyrics) {
@@ -564,7 +596,7 @@ fun LyricsEnhanced(
                                 showTranslation = showTranslations,
                                 showPhonetic = showPhonetics,
                                 offset = lyricsViewportOffset,
-                                keepAliveZone = 72.dp,
+                                keepAliveZone = keepAliveZoneDp.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }

@@ -115,6 +115,7 @@ import moe.rukamori.archivetune.constants.PlayerCustomContrastKey
 import moe.rukamori.archivetune.constants.PlayerCustomImageUriKey
 import moe.rukamori.archivetune.constants.ShowLyricsPlayerControlsKey
 import moe.rukamori.archivetune.extensions.togglePlayPause
+import moe.rukamori.archivetune.lyrics.LyricsTextColorMode
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.LyricsEnhanced
@@ -179,11 +180,42 @@ fun LyricsScreen(
     val playerCustomBlur by rememberPreference(PlayerCustomBlurKey, 0f)
     val playerCustomContrast by rememberPreference(PlayerCustomContrastKey, 1f)
     val playerCustomBrightness by rememberPreference(PlayerCustomBrightnessKey, 1f)
+    // Resolve the lyrics text colour from the current mode. The default
+    // path keeps the previous behaviour exactly; the dynamic-theme paths
+    // ride MaterialTheme.colorScheme so lyrics track the same palette as
+    // the rest of the UI; the custom path uses the user-provided colour
+    // (with a safe fallback when the stored value is missing).
+    val dynamicThemePrimary = MaterialTheme.colorScheme.primary
+    val dynamicThemeTertiary = MaterialTheme.colorScheme.tertiary
+    val dynamicThemeOnSurface = MaterialTheme.colorScheme.onSurface
     val foregroundColor =
-        if (lyricsBackground == LyricsBackgroundStyle.FOLLOW_THEME) {
-            MaterialTheme.colorScheme.onSurface
-        } else {
-            Color.White
+        remember(
+            lyricsBackground,
+            lyricsRenderState,
+            dynamicThemePrimary,
+            dynamicThemeTertiary,
+            dynamicThemeOnSurface,
+        ) {
+            val mode = (lyricsRenderState as? LyricsRenderScreenState.Success)
+                ?.lyrics
+                ?.preferences
+                ?.textColorMode
+                ?: LyricsTextColorMode.DEFAULT
+            val custom = (lyricsRenderState as? LyricsRenderScreenState.Success)
+                ?.lyrics
+                ?.preferences
+                ?.textColorCustom
+            when (mode) {
+                LyricsTextColorMode.DEFAULT ->
+                    if (lyricsBackground == LyricsBackgroundStyle.FOLLOW_THEME) {
+                        dynamicThemeOnSurface
+                    } else {
+                        Color.White
+                    }
+                LyricsTextColorMode.DYNAMIC_THEME_PRIMARY -> dynamicThemePrimary
+                LyricsTextColorMode.DYNAMIC_THEME_TERTIARY -> dynamicThemeTertiary
+                LyricsTextColorMode.CUSTOM -> custom ?: Color.White
+            }
         }
     val showPlayerControlsState =
         rememberPreference(ShowLyricsPlayerControlsKey, true)
