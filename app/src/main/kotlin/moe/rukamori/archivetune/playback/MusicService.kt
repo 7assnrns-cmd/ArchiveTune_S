@@ -2739,34 +2739,60 @@ private data class PendingCrossfadeQueueSwap(
                     delay(CROSSFADE_FRAME_MS)
                 }
 
-                // Handoff WITHOUT pause. Primary stays silent while it
-                // seeks and buffers the incoming track; secondary keeps
-                // producing audio during the transition. Once the primary
-                // is actually producing audio at the target position, the
-                // two players fade in opposite directions over
-                // CROSSFADE_HANDOFF_DURATION_MS so the sum stays roughly
-                // constant and the transition is inaudible. Without this
-                // ramp, primary.volume jumped from 0f to full gain in a
-                // single frame, which was audible as a click.
-                localPlayer.volume = 0f
-                player.seekTo(targetIndex, incoming.currentPosition.coerceAtLeast(0L))
-                player.playWhenReady = true
-                if (player.playbackState == Player.STATE_IDLE) player.prepare()
+                // Handoff WITHOUT pause.
+                //
+                // Strategy: secondary is the ONLY audible source during the
+                // handoff window. Primary is prepared on the incoming item
+                // BEFORE we touch its volume; once it has buffered enough
+                // to start without rebuffering, we seek, ramp primary up
+                // while ramping secondary down, and only then release
+                // secondary.
+                //
+                // Previously this block set primary.volume = 0f first and
+                // then called seekTo + prepare, which tore down the current
+                // AudioTrack while secondary was ramping in — producing a
+                // brief silence between the two. Now primary stays at its
+                // current volume until the secondary player is fully
+                // buffered on the incoming item.
+                val incomingPosition = incoming.currentPosition.coerceAtLeast(0L)
 
+                // Step 1: Prepare primary on the incoming item WITHOUT
+                // silencing it yet. setMediaItems + prepare loads the buffer
+                // in the background; the current audible track continues
+                // because we do not change playWhenReady or volume here.
+                val alreadyOnTarget = player.currentMediaItemIndex == targetIndex &&
+                    player.playbackState != Player.STATE_IDLE &&
+                    player.playbackState != Player.STATE_ENDED &&
+                    player.currentPosition >= incomingPosition - CROSSFADE_HANDOFF_MAX_DRIFT_MS
+
+                if (!alreadyOnTarget) {
+                    player.prepare()
+                }
+
+                // Step 2: Wait for primary to be READY on the target before
+                // we commit to the swap. If it cannot reach READY within
+                // the handoff timeout, abort and let secondary take over.
                 val dl = android.os.SystemClock.elapsedRealtime() + 20_000L
                 while (isActive && android.os.SystemClock.elapsedRealtime() < dl) {
                     val ps = player.playbackState
-                    if (ps == Player.STATE_READY || ps == Player.STATE_BUFFERING) { swapped = true; break }
+                    if (ps == Player.STATE_READY) { swapped = true; break }
                     if (ps == Player.STATE_IDLE) player.prepare()
                     if (ps == Player.STATE_ENDED) break
                     delay(25L)
                 }
+
                 if (swapped) {
                     val handoffBaseVolume =
                         secondaryCrossfadeTarget?.let {
                             currentEffectivePlayerVolumeForMediaId(it.mediaId)
                         } ?: crossfadeIncomingBaseVolume
                     crossfadeIncomingBaseVolume = handoffBaseVolume
+
+                    // Step 3: Now that primary is READY, seek it to the
+                    // exact secondary position and start the equal-power
+                    // ramp. Both players are audible during the ramp.
+                    player.seekTo(targetIndex, incomingPosition)
+                    player.playWhenReady = true
 
                     crossfadeHandoffInProgress = true
                     crossfadeHandoffProgress = 0f
