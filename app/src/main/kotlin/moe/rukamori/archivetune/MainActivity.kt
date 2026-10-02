@@ -503,8 +503,48 @@ class MainActivity : ComponentActivity() {
         return hasRestorablePlayback(connection)
     }
 
+    /**
+     * Asks the system to run this window at the highest refresh rate the
+     * display supports. Without an explicit request, Android 12+ keeps
+     * third-party apps on 60 Hz even when the user has enabled
+     * "Force peak refresh rate" in developer options.
+     *
+     * preferredRefreshRate is preferred over preferredDisplayModeId because
+     * it lets the platform pick any display mode whose refresh rate matches,
+     * rather than pinning a specific mode id (which is not portable).
+     */
+    private fun applyHighRefreshRate() {
+        runCatching {
+            val display = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
+                display
+            } else {
+                @Suppress("DEPRECATION")
+                windowManager.defaultDisplay
+            } ?: return
+
+            val highestRefreshRate =
+                display.supportedModes
+                    .maxOfOrNull { it.refreshRate }
+                    ?: return
+
+            // Only act if the display can actually exceed 60 Hz.
+            if (highestRefreshRate <= 60.01f) return
+
+            window.attributes =
+                window.attributes.apply {
+                    preferredRefreshRate = highestRefreshRate
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                        preferredDisplayModeId = 0
+                    }
+                }
+        }.onFailure {
+            reportException(it)
+        }
+    }
+
     override fun onStart() {
         super.onStart()
+        applyHighRefreshRate()
         registerAodScreenOffReceiver()
         isMusicServiceBound =
             bindService(
