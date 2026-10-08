@@ -200,3 +200,82 @@ jobs:
         with:
           name: app-release-universal-signed
           path: ${{ steps.release_dir.outputs.release_dir }}/*.apk
+
+      # ─────────────────────────────────────────────────────────────
+      # Auto-draft release
+      # ─────────────────────────────────────────────────────────────
+      # After a successful signed build on main, create a DRAFT GitHub
+      # release tagged v<versionName> with the APK already attached.
+      # The draft appears in the Releases page waiting for you to
+      # review and click "Publish release".
+      #
+      # If a release or draft for the same tag already exists, the step
+      # is a no-op. Bump versionName in build.gradle.kts to trigger a
+      # new draft.
+      - name: Create draft GitHub release
+        if: success() && github.ref == 'refs/heads/main'
+        shell: bash
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+
+          VERSION=$(grep -m1 -oP 'versionName\s*=\s*"\K[^"]+' app/build.gradle.kts || true)
+          if [ -z "$VERSION" ]; then
+            echo "::warning::Could not read versionName from build.gradle.kts"
+            exit 0
+          fi
+
+          TAG="v${VERSION}"
+          echo "Detected version: $VERSION  →  tag: $TAG"
+
+          if gh release view "$TAG" --repo "${{ github.repository }}" >/dev/null 2>&1; then
+            echo "Release or draft $TAG already exists — skipping."
+            exit 0
+          fi
+
+          APK_DIR="${{ steps.release_dir.outputs.release_dir }}"
+          if [ ! -d "$APK_DIR" ]; then
+            echo "::warning::APK directory not found: $APK_DIR"
+            exit 0
+          fi
+
+          mapfile -t APKS < <(find "$APK_DIR" -name '*.apk')
+          if [ "${#APKS[@]}" -eq 0 ]; then
+            echo "::warning::No APKs found in $APK_DIR"
+            exit 0
+          fi
+
+          NOTES="## ArchiveTune S ${TAG}
+
+          Auto-draft from commit [\${{ github.sha }}](https://github.com/\${{ github.repository }}/commit/\${{ github.sha }}).
+
+          **Package id:** \`moe.rukamori.archivetune.s\` — installs alongside the official ArchiveTune.
+
+          **Upstream:** [rukamori/ArchiveTune](https://github.com/rukamori/ArchiveTune). This is an unofficial fork; no support offered.
+
+          ### Changes in this release
+
+          - Reworked manual crossfade handoff (no audible gap)
+          - Lyrics performance improvements (V2 and Enhanced)
+          - Letter-by-letter animation mode
+          - Custom lyrics text colour with contrast guard
+          - Real-time FPS overlay (Developer options)
+          - Signed release builds"
+
+          gh release create "$TAG" \
+            --repo "${{ github.repository }}" \
+            --title "ArchiveTune S ${TAG}" \
+            --notes "$NOTES" \
+            --draft \
+            "${APKS[@]}"
+
+          echo "Draft release $TAG created with ${#APKS[@]} APK(s)."
+          echo "Review it at: https://github.com/${{ github.repository }}/releases"
+
+          # Optional: ping the Actions summary
+          echo "### Draft created" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Tag: \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "[Open Releases page](https://github.com/${{ github.repository }}/releases)" >> "$GITHUB_STEP_SUMMARY" 
