@@ -117,6 +117,26 @@ import moe.rukamori.archivetune.utils.rememberEnumPreference
 import moe.rukamori.archivetune.viewmodels.LyricsRenderScreenState
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.PaddingValues
+import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.layout.FlowRow
+import androidx.compose.foundation.layout.ExperimentalLayoutApi
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.tween
+import androidx.compose.ui.draw.blur
+import androidx.compose.ui.draw.BlurredEdgeTreatment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.background
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.CancellationException
+import kotlin.math.roundToInt
+
 
 private const val LRC_LEAD_MS = 300L
 private const val WORD_SYNC_LEAD_MS = 0L
@@ -125,6 +145,308 @@ private const val SMOOTH_PLAYBACK_MAX_BACKWARD_DRIFT_MS = 250.0
 private const val SMOOTH_PLAYBACK_DRIFT_CORRECTION = 0.08
 private const val SMOOTH_PLAYBACK_MAX_CORRECTION_PER_FRAME_MS = 2.0
 private const val MIN_KARAOKE_SYLLABLE_DURATION_MS = 1
+
+
+
+// ═══════════════════════════════════════════════════════════════════
+// Enhanced lyrics — hand-rolled renderer
+// ═══════════════════════════════════════════════════════════════════
+//
+// Replaces the library KaraokeLyricsView. The previous renderer
+// subscribed every visible line to the live playback position, which
+// forced a full list recomposition 60 times per second. This
+// implementation uses a plain LazyColumn and passes sentinel values
+// (Int.MAX_VALUE for past lines, Int.MIN_VALUE for future lines) so
+// only the active line reads playbackSyncPosition() during
+// composition. Non-active lines therefore never subscribe to the hot
+// state and are not invalidated when the position ticks.
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun EnhancedLyricsList(
+    listState: androidx.compose.foundation.lazy.LazyListState,
+    lines: List<ISyncedLine>,
+    currentLineIndex: Int,
+    playbackSyncPosition: () -> Int,
+    textColor: Color,
+    normalTextStyle: TextStyle,
+    accompanimentTextStyle: TextStyle,
+    phoneticTextStyle: TextStyle,
+    showTranslations: Boolean,
+    showPhonetics: Boolean,
+    useBlurEffect: Boolean,
+    selectedLineKeys: Set<String>,
+    isSelectionModeActive: Boolean,
+    viewportOffsetPx: Int,
+    onLineClicked: (ISyncedLine) -> Unit,
+    onLinePressed: (ISyncedLine) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    LazyColumn(
+        state = listState,
+        modifier = modifier.fillMaxSize(),
+        contentPadding = PaddingValues(top = viewportOffsetPx.dp, bottom = 200.dp),
+        verticalArrangement = Arrangement.spacedBy(2.dp),
+    ) {
+        itemsIndexed(
+            items = lines,
+            key = { _, line -> line.selectionKey() },
+        ) { index, line ->
+            val isActive = index == currentLineIndex
+            val isPast = index < currentLineIndex
+            val isSelected = isSelectionModeActive && line.selectionKey() in selectedLineKeys
+
+            // Only the active line reads the live position. Past and
+            // future lines receive sentinels so they never subscribe
+            // to playbackPositionMs and never recompose on tick.
+            val linePositionMs: Int = when {
+                isActive -> playbackSyncPosition()
+                isPast -> Int.MAX_VALUE
+                else -> Int.MIN_VALUE
+            }
+
+            EnhancedLyricLine(
+                line = line,
+                currentPositionMs = linePositionMs,
+                isActive = isActive,
+                isPast = isPast,
+                isSelected = isSelected,
+                textColor = textColor,
+                normalTextStyle = normalTextStyle,
+                accompanimentTextStyle = accompanimentTextStyle,
+                phoneticTextStyle = phoneticTextStyle,
+                showTranslation = showTranslations,
+                showPhonetic = showPhonetics,
+                useBlurEffect = useBlurEffect,
+                onClick = { onLineClicked(line) },
+                onLongClick = { onLinePressed(line) },
+            )
+        }
+    }
+}
+
+@Composable
+private fun EnhancedLyricLine(
+    line: ISyncedLine,
+    currentPositionMs: Int,
+    isActive: Boolean,
+    isPast: Boolean,
+    isSelected: Boolean,
+    textColor: Color,
+    normalTextStyle: TextStyle,
+    accompanimentTextStyle: TextStyle,
+    phoneticTextStyle: TextStyle,
+    showTranslation: Boolean,
+    showPhonetic: Boolean,
+    useBlurEffect: Boolean,
+    onClick: () -> Unit,
+    onLongClick: () -> Unit,
+) {
+    val targetAlpha = when {
+        isActive -> 1f
+        isPast -> 0.55f
+        else -> 0.35f
+    }
+    val animatedAlpha by animateFloatAsState(
+        targetValue = targetAlpha,
+        animationSpec = tween(durationMillis = 250),
+        label = "enhancedLineAlpha",
+    )
+
+    // Blur is applied at the line level, as a single modifier. The
+    // previous library applied blur to every text layer inside the
+    // line (romanization + main + translation), producing up to
+    // three separate render layers per visible line.
+    val targetBlur = if (useBlurEffect && !isActive && !isPast) 3f else 0f
+    val animatedBlur by animateFloatAsState(
+        targetValue = targetBlur,
+        animationSpec = tween(durationMillis = 250),
+        label = "enhancedLineBlur",
+    )
+    val blurModifier = if (useBlurEffect && animatedBlur > 0.01f) {
+        Modifier.blur(animatedBlur.dp, edgeTreatment = BlurredEdgeTreatment.Unbounded)
+    } else {
+        Modifier
+    }
+
+    val textAlign = when {
+        line is KaraokeLine && line.alignment == KaraokeAlignment.End -> TextAlign.End
+        line is KaraokeLine && line.alignment == KaraokeAlignment.Center -> TextAlign.Center
+        else -> TextAlign.Start
+    }
+    val horizontalAlignment = when (textAlign) {
+        TextAlign.End -> Alignment.End
+        TextAlign.Center -> Alignment.CenterHorizontally
+        else -> Alignment.Start
+    }
+    val flowArrangement = when (textAlign) {
+        TextAlign.End -> Arrangement.End
+        TextAlign.Center -> Arrangement.Center
+        else -> Arrangement.Start
+    }
+
+    Column(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clip(RoundedCornerShape(8.dp))
+            .background(
+                color = if (isSelected) {
+                    androidx.compose.material3.MaterialTheme.colorScheme.primary.copy(alpha = 0.25f)
+                } else {
+                    Color.Transparent
+                },
+            )
+            .combinedClickable(onClick = onClick, onLongClick = onLongClick)
+            .then(blurModifier)
+            .alpha(animatedAlpha)
+            .padding(horizontal = 12.dp, vertical = 8.dp),
+        horizontalAlignment = horizontalAlignment,
+    ) {
+        when (line) {
+            is KaraokeLine -> KaraokeLineContent(
+                line = line,
+                currentPositionMs = currentPositionMs,
+                isPast = isPast,
+                textColor = textColor,
+                normalTextStyle = normalTextStyle,
+                accompanimentTextStyle = accompanimentTextStyle,
+                phoneticTextStyle = phoneticTextStyle,
+                showTranslation = showTranslation,
+                showPhonetic = showPhonetic,
+                textAlign = textAlign,
+                flowArrangement = flowArrangement,
+            )
+            is SyncedLine -> SyncedLineContent(
+                line = line,
+                textColor = textColor,
+                normalTextStyle = normalTextStyle,
+                phoneticTextStyle = phoneticTextStyle,
+                showTranslation = showTranslation,
+                textAlign = textAlign,
+            )
+            else -> Unit
+        }
+    }
+}
+
+@OptIn(ExperimentalLayoutApi::class)
+@Composable
+private fun KaraokeLineContent(
+    line: KaraokeLine,
+    currentPositionMs: Int,
+    isPast: Boolean,
+    textColor: Color,
+    normalTextStyle: TextStyle,
+    accompanimentTextStyle: TextStyle,
+    phoneticTextStyle: TextStyle,
+    showTranslation: Boolean,
+    showPhonetic: Boolean,
+    textAlign: TextAlign,
+    flowArrangement: Arrangement.Horizontal,
+) {
+    if (showPhonetic && !line.phonetic.isNullOrBlank()) {
+        Text(
+            text = line.phonetic,
+            style = phoneticTextStyle,
+            color = textColor.copy(alpha = 0.55f),
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth(),
+        )
+    }
+
+    FlowRow(
+        modifier = Modifier.fillMaxWidth(),
+        horizontalArrangement = flowArrangement,
+    ) {
+        line.syllables.forEach { syllable ->
+            val isSyllablePast = isPast || currentPositionMs >= syllable.end
+            val isSyllableActive =
+                !isPast && currentPositionMs in syllable.start until syllable.end
+
+            val syllableColor = if (isSyllablePast || isSyllableActive) {
+                textColor
+            } else {
+                textColor.copy(alpha = 0.42f)
+            }
+
+            Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                if (showPhonetic && !syllable.phonetic.isNullOrBlank()) {
+                    Text(
+                        text = syllable.phonetic,
+                        style = phoneticTextStyle,
+                        color = syllableColor.copy(alpha = 0.65f),
+                    )
+                }
+                Text(
+                    text = syllable.content,
+                    style = normalTextStyle,
+                    color = syllableColor,
+                )
+            }
+        }
+    }
+
+    if (showTranslation && !line.translation.isNullOrBlank()) {
+        Text(
+            text = line.translation,
+            style = phoneticTextStyle,
+            color = textColor.copy(alpha = 0.7f),
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+    }
+
+    line.accompanimentLines?.forEach { acc ->
+        FlowRow(
+            modifier = Modifier.fillMaxWidth().padding(top = 2.dp),
+            horizontalArrangement = flowArrangement,
+        ) {
+            acc.syllables.forEach { syllable ->
+                val isSyllablePast =
+                    isPast || currentPositionMs >= syllable.end
+                val isSyllableActive =
+                    !isPast && currentPositionMs in syllable.start until syllable.end
+                Text(
+                    text = syllable.content,
+                    style = accompanimentTextStyle,
+                    color = if (isSyllablePast || isSyllableActive) {
+                        textColor.copy(alpha = 0.85f)
+                    } else {
+                        textColor.copy(alpha = 0.35f)
+                    },
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun SyncedLineContent(
+    line: SyncedLine,
+    textColor: Color,
+    normalTextStyle: TextStyle,
+    phoneticTextStyle: TextStyle,
+    showTranslation: Boolean,
+    textAlign: TextAlign,
+) {
+    Text(
+        text = line.content,
+        style = normalTextStyle,
+        color = textColor,
+        textAlign = textAlign,
+        modifier = Modifier.fillMaxWidth(),
+    )
+    if (showTranslation && !line.translation.isNullOrBlank()) {
+        Text(
+            text = line.translation,
+            style = phoneticTextStyle,
+            color = textColor.copy(alpha = 0.7f),
+            textAlign = textAlign,
+            modifier = Modifier.fillMaxWidth().padding(top = 4.dp),
+        )
+    }
+}
+
 
 @Composable
 fun LyricsEnhanced(
@@ -561,14 +883,67 @@ fun LyricsEnhanced(
                 BoxWithConstraints(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    val lyricsViewportOffset = remember(maxHeight, viewportOffsetFraction) { maxHeight * viewportOffsetFraction }
+                    val lyricsViewportOffset =
+                        remember(maxHeight, viewportOffsetFraction) {
+                            (maxHeight * viewportOffsetFraction).value.toInt().coerceAtLeast(0)
+                        }
+
+                    // Track the index of the active line ourselves. Only
+                    // changes when the active line changes (once every
+                    // few seconds), not on every position tick.
+                    val currentLineIndex by androidx.compose.runtime.remember(syncedLyrics) {
+                        androidx.compose.runtime.derivedStateOf {
+                            val pos = playbackSyncPosition()
+                            var idx = 0
+                            val list = syncedLyrics.lines
+                            for (i in list.indices) {
+                                if (list[i].start <= pos) idx = i else break
+                            }
+                            idx
+                        }
+                    }
+
+                    // Auto-scroll to keep the active line visible.
+                    LaunchedEffect(currentLineIndex, syncedLyrics) {
+                        if (currentLineIndex < 0 ||
+                            currentLineIndex >= syncedLyrics.lines.size
+                        ) return@LaunchedEffect
+                        try {
+                            val viewportHeight =
+                                listState.layoutInfo.viewportSize.height
+                            if (viewportHeight > 0) {
+                                listState.animateScrollToItem(
+                                    index = currentLineIndex,
+                                    scrollOffset =
+                                        -(viewportHeight * 0.30f).toInt(),
+                                )
+                            } else {
+                                listState.animateScrollToItem(currentLineIndex)
+                            }
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (_: Exception) {
+                            // Ignore — user may be scrolling manually.
+                        }
+                    }
 
                     CompositionLocalProvider(LocalLayoutDirection provides lyricsLayoutDirection) {
                         key(lyricsSessionKey, syncedLyrics) {
-                            KaraokeLyricsView(
+                            EnhancedLyricsList(
                                 listState = listState,
-                                lyrics = syncedLyrics,
-                                currentPosition = playbackSyncPosition,
+                                lines = syncedLyrics.lines,
+                                currentLineIndex = currentLineIndex,
+                                playbackSyncPosition = playbackSyncPosition,
+                                textColor = textColor,
+                                normalTextStyle = normalTextStyle,
+                                accompanimentTextStyle = accompanimentTextStyle,
+                                phoneticTextStyle = phoneticTextStyle,
+                                showTranslations = showTranslations,
+                                showPhonetics = showPhonetics,
+                                useBlurEffect = lyricsLineBlur,
+                                selectedLineKeys = selectedLineKeySet,
+                                isSelectionModeActive = isSelectionModeActive,
+                                viewportOffsetPx = lyricsViewportOffset,
                                 onLineClicked = { line ->
                                     if (isSelectionModeActive) {
                                         toggleSelectedLine(line.selectionKey())
@@ -587,16 +962,6 @@ fun LyricsEnhanced(
                                         toggleSelectedLine(lineKey)
                                     }
                                 },
-                                textColor = textColor,
-                                normalLineTextStyle = normalTextStyle,
-                                accompanimentLineTextStyle = accompanimentTextStyle,
-                                phoneticTextStyle = phoneticTextStyle,
-                                blendMode = BlendMode.SrcOver,
-                                useBlurEffect = lyricsLineBlur,
-                                showTranslation = showTranslations,
-                                showPhonetic = showPhonetics,
-                                offset = lyricsViewportOffset,
-                                keepAliveZone = keepAliveZoneDp.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
