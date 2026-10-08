@@ -430,7 +430,7 @@ object Updater {
     // signature verification anyway. Return a blank string so
     // UpdateScreen knows to hide the install button for the official
     // channel.
-    fun getOfficialLatestDownloadUrl(): String = 
+    fun getOfficialLatestDownloadUrl(): String = ""
 
     suspend fun getLatestReleaseNotes(): Result<String?> = getLatestReleaseInfo().map { it.body }
 
