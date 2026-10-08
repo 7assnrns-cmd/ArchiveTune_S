@@ -300,12 +300,14 @@ fun UpdateScreen(
                 UpdateChannel.OFFICIAL_VERSION -> Updater.getOfficialLatestDownloadUrl()
             }
 
-        Button(
-            onClick = { installUpdate(downloadUrl) },
-            modifier = Modifier.fillMaxWidth(),
-            shapes = ButtonDefaults.shapes(),
-        ) {
-            Text(text = stringResource(R.string.update_text))
+        if (downloadUrl.isNotBlank()) {
+            Button(
+                onClick = { installUpdate(downloadUrl) },
+                modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
+            ) {
+                Text(text = stringResource(R.string.update_text))
+            }
         }
 
         Spacer(Modifier.height(12.dp))

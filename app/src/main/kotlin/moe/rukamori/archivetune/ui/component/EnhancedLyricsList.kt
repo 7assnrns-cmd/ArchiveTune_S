@@ -281,7 +281,10 @@ private fun KaraokeLineContent(
 
     val main = line as? KaraokeLine.MainKaraokeLine
     if (main != null) {
-        for (acc in main.accompanimentLines) {
+        // accompanimentLines is nullable on MainKaraokeLine (it has a
+        // default value in the constructor). orEmpty() gives us a plain
+        // empty list to iterate over when the field is null.
+        for (acc in main.accompanimentLines.orEmpty()) {
             FlowRow(
                 modifier = Modifier
                     .fillMaxWidth()

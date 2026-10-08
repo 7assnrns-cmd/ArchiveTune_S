@@ -427,15 +427,10 @@ object Updater {
     // Direct download of the upstream APK is intentionally not
     // supported. Installing rukamori's signed release over this fork's
     // own application id (moe.rukamori.archivetune.s) would fail
-    // signature verification anyway, and the user's data lives in this
-    // fork's package. Return a failure so UpdateScreen does not render
-    // a download button for the official channel.
-    fun getOfficialLatestDownloadUrl(): Result<String> =
-        Result.failure(
-            IllegalStateException(
-                "Direct download is not available for the official upstream channel",
-            ),
-        )
+    // signature verification anyway. Return a blank string so
+    // UpdateScreen knows to hide the install button for the official
+    // channel.
+    fun getOfficialLatestDownloadUrl(): String = 
 
     suspend fun getLatestReleaseNotes(): Result<String?> = getLatestReleaseInfo().map { it.body }
 
