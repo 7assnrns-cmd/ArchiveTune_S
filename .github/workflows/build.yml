@@ -96,6 +96,16 @@ jobs:
     if: github.actor != 'dependabot[bot]' && github.actor != 'renovate[bot]'
     runs-on: ubuntu-latest
 
+    # Required for 'gh release create' inside this job. The workflow-
+    # level permissions block above declares contents: read for
+    # security; this job needs write access to create the draft
+    # release and upload its assets. GITHUB_TOKEN cannot receive the
+    # 'workflows' permission, so we scope the write grant here rather
+    # than globally.
+    permissions:
+      contents: write
+      actions: read
+
     steps:
       - uses: actions/checkout@v7
         with:
