@@ -127,3 +127,7 @@ core.*
 .bak_fix/
 *.before_*
 _backups/
+
+# Local backup folders created during development
+.archiveTune_*/
+.archiveTune_*
