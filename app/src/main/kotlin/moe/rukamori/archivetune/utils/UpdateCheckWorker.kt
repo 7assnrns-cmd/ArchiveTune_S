@@ -39,8 +39,8 @@ class UpdateCheckWorker(
 
             val latestVersion =
                 when (updateChannel) {
-                    UpdateChannel.ARTIFACT -> Updater.getLatestCanaryVersionName()
-                    UpdateChannel.STABLE -> Updater.getLatestVersionName()
+                    UpdateChannel.MY_VERSION -> Updater.getLatestCanaryVersionName()
+                    UpdateChannel.OFFICIAL_VERSION -> Updater.getLatestVersionName()
                 }.getOrElse { throw it }
 
             if (Updater.isUpdateAvailable(latestVersion, BuildConfig.VERSION_NAME)) {

@@ -97,8 +97,8 @@ object UpdateNotificationManager {
 
                 val latestVersion =
                     when (updateChannel) {
-                        UpdateChannel.ARTIFACT -> Updater.getLatestCanaryVersionName()
-                        UpdateChannel.STABLE -> Updater.getLatestVersionName()
+                        UpdateChannel.MY_VERSION -> Updater.getLatestCanaryVersionName()
+                        UpdateChannel.OFFICIAL_VERSION -> Updater.getLatestVersionName()
                     }.getOrElse { throw it }
 
                 if (Updater.isUpdateAvailable(latestVersion, BuildConfig.VERSION_NAME)) {
@@ -115,7 +115,7 @@ object UpdateNotificationManager {
     suspend fun notifyIfNewVersion(
         context: Context,
         latestVersion: String,
-        updateChannel: UpdateChannel = UpdateChannel.STABLE,
+        updateChannel: UpdateChannel = UpdateChannel.OFFICIAL_VERSION,
     ) {
         if (!BuildConfig.UPDATER_AVAILABLE) return
 
@@ -140,7 +140,7 @@ object UpdateNotificationManager {
     private fun showUpdateNotification(
         context: Context,
         newVersion: String,
-        updateChannel: UpdateChannel = UpdateChannel.STABLE,
+        updateChannel: UpdateChannel = UpdateChannel.OFFICIAL_VERSION,
     ) {
         createNotificationChannel(context)
 
@@ -159,8 +159,8 @@ object UpdateNotificationManager {
 
         val downloadUrl =
             when (updateChannel) {
-                UpdateChannel.ARTIFACT -> Updater.getLatestCanaryDownloadUrl()
-                UpdateChannel.STABLE -> Updater.getLatestDownloadUrl()
+                UpdateChannel.MY_VERSION -> Updater.getLatestCanaryDownloadUrl()
+                UpdateChannel.OFFICIAL_VERSION -> Updater.getLatestDownloadUrl()
             }
         val downloadIntent = Intent(Intent.ACTION_VIEW, Uri.parse(downloadUrl))
         val downloadPendingIntent =

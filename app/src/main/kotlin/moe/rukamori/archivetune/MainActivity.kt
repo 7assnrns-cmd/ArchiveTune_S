@@ -773,12 +773,12 @@ class MainActivity : ComponentActivity() {
                 if (
                     currentUpdateSettings.automaticChecksEnabled &&
                     BuildConfig.UPDATER_AVAILABLE &&
-                    updateChannel != UpdateChannel.ARTIFACT &&
+                    updateChannel != UpdateChannel.MY_VERSION &&
                     System.currentTimeMillis() - Updater.lastCheckTime > 1.days.inWholeMilliseconds
                 ) {
                     Updater.getLatestVersionName().onSuccess { latestVersion ->
                         if (Updater.isUpdateAvailable(latestVersion, BuildConfig.VERSION_NAME)) {
-                            latestUpdateChannel = UpdateChannel.STABLE
+                            latestUpdateChannel = UpdateChannel.OFFICIAL_VERSION
                             latestVersionName = latestVersion
                         }
                     }
@@ -874,12 +874,12 @@ class MainActivity : ComponentActivity() {
                 if (
                     BuildConfig.UPDATER_AVAILABLE &&
                     latestUpdateChannel == updateChannel &&
-                    latestUpdateChannel != UpdateChannel.ARTIFACT &&
+                    latestUpdateChannel != UpdateChannel.MY_VERSION &&
                     Updater.isUpdateAvailable(latestVersionName, BuildConfig.VERSION_NAME)
                 ) {
                     val releaseNotesResult =
                         when (latestUpdateChannel) {
-                            UpdateChannel.STABLE -> Updater.getLatestReleaseNotes()
+                            UpdateChannel.OFFICIAL_VERSION -> Updater.getLatestReleaseNotes()
                             else -> return@LaunchedEffect
                         }
                     releaseNotesResult
@@ -2108,7 +2108,7 @@ class MainActivity : ComponentActivity() {
                                                             if (
                                                                 BuildConfig.UPDATER_AVAILABLE &&
                                                                 latestUpdateChannel == updateChannel &&
-                                                                latestUpdateChannel != UpdateChannel.ARTIFACT &&
+                                                                latestUpdateChannel != UpdateChannel.MY_VERSION &&
                                                                 Updater.isUpdateAvailable(latestVersionName, BuildConfig.VERSION_NAME)
                                                             ) {
                                                                 Badge()

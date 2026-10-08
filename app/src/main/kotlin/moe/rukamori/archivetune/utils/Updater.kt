@@ -379,6 +379,56 @@ object Updater {
 
     suspend fun getLatestVersionName(): Result<String> = getLatestReleaseInfo().map(::getReleaseVersionName)
 
+    // ─────────────────────────────────────────────────────────
+    // Official upstream channel (rukamori/ArchiveTune)
+    // ─────────────────────────────────────────────────────────
+    //
+    // The OFFICIAL_VERSION update channel reads directly from the
+    // upstream repository's GitHub Releases, independent of the
+    // fork's own RELEASE_GITHUB_* build config. This lets users
+    // switch between the fork's releases (MY_VERSION, default) and
+    // the upstream project's releases without rebuilding the app.
+
+    private val officialOwner: String
+        get() = BuildConfig.OFFICIAL_GITHUB_OWNER
+
+    private val officialRepo: String
+        get() = BuildConfig.OFFICIAL_GITHUB_REPO
+
+    private suspend fun fetchOfficialReleases(perPage: Int = 30): List<ReleaseInfo> {
+        val response = client.get(
+            "https://api.github.com/repos/$officialOwner/$officialRepo/releases?per_page=$perPage",
+        ) {
+            headers {
+                append("Accept", "application/vnd.github+json")
+                append("User-Agent", "ArchiveTune")
+            }
+        }
+        if (response.status != HttpStatusCode.OK) {
+            throw IllegalStateException(
+                "GitHub API returned ${response.status} for $officialOwner/$officialRepo",
+            )
+        }
+        return parseReleasesJson(response.bodyAsText(), stableReleaseArtifactName())
+    }
+
+    suspend fun getOfficialLatestReleaseInfo(forceRefresh: Boolean = false): Result<ReleaseInfo> =
+        runCatchingCancellable {
+            val releases = fetchOfficialReleases()
+            findLatestRelease(releases) ?: throw IllegalStateException("No releases found upstream")
+        }
+
+    suspend fun getOfficialLatestVersionName(): Result<String> =
+        getOfficialLatestReleaseInfo().map(::getReleaseVersionName)
+
+    suspend fun getOfficialLatestReleaseNotes(): Result<String?> =
+        getOfficialLatestReleaseInfo().map { it.body }
+
+    suspend fun getOfficialLatestDownloadUrl(): Result<String> =
+        getOfficialLatestReleaseInfo().map {
+            it.downloadUrl ?: throw IllegalStateException("No APK asset in the upstream release")
+        }
+
     suspend fun getLatestReleaseNotes(): Result<String?> = getLatestReleaseInfo().map { it.body }
 
     suspend fun getLatestReleaseInfo(forceRefresh: Boolean = false): Result<ReleaseInfo> =

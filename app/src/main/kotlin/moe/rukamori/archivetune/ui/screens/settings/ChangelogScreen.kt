@@ -38,7 +38,7 @@ import java.util.Locale
 @Composable
 fun ChangelogScreen(
     navController: NavController,
-    channel: UpdateChannel = UpdateChannel.STABLE,
+    channel: UpdateChannel = UpdateChannel.OFFICIAL_VERSION,
 ) {
     val coroutineScope = rememberCoroutineScope()
     var releases by remember { mutableStateOf<List<ReleaseInfo>>(emptyList()) }
@@ -48,7 +48,7 @@ fun ChangelogScreen(
     suspend fun loadReleases(forceRefresh: Boolean) {
         val result =
             when (channel) {
-                UpdateChannel.ARTIFACT -> Updater.getAllArtifactReleases(forceRefresh = forceRefresh)
+                UpdateChannel.MY_VERSION -> Updater.getAllArtifactReleases(forceRefresh = forceRefresh)
                 else -> Updater.getAllReleases(forceRefresh = forceRefresh)
             }
         result
@@ -66,7 +66,7 @@ fun ChangelogScreen(
     LaunchedEffect(Unit) {
         val cachedReleases =
             when (channel) {
-                UpdateChannel.ARTIFACT -> Updater.getCachedArtifactReleases()
+                UpdateChannel.MY_VERSION -> Updater.getCachedArtifactReleases()
                 else -> Updater.getCachedReleases()
             }
         if (cachedReleases.isNotEmpty()) {

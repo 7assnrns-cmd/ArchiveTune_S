@@ -18,7 +18,7 @@ internal val isNightlyBuild: Boolean
     get() = BuildConfig.IS_NIGHTLY_BUILD
 
 internal val defaultUpdateChannel: UpdateChannel
-    get() = if (isCanaryBuild) UpdateChannel.ARTIFACT else UpdateChannel.STABLE
+    get() = UpdateChannel.MY_VERSION
 
 internal val channelTitle: String
     get() = if (isNightlyBuild) "Nightly" else "Stable"

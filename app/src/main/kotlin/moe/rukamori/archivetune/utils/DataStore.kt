@@ -71,7 +71,7 @@ val Context.dataStore: DataStore<Preferences> by preferencesDataStore(
 
                 override suspend fun migrate(currentData: Preferences): Preferences =
                     currentData.toMutablePreferences().apply {
-                        this[UpdateChannelKey] = UpdateChannel.ARTIFACT.name
+                        this[UpdateChannelKey] = UpdateChannel.MY_VERSION.name
                     }
 
                 override suspend fun cleanUp() {}

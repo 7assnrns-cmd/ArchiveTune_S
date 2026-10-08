@@ -133,6 +133,8 @@ android {
                 ?: githubRepo
         buildConfigField("String", "RELEASE_GITHUB_OWNER", releaseGithubOwner.asBuildConfigString())
         buildConfigField("String", "RELEASE_GITHUB_REPO", releaseGithubRepo.asBuildConfigString())
+        buildConfigField("String", "OFFICIAL_GITHUB_OWNER", "\"rukamori\"")
+        buildConfigField("String", "OFFICIAL_GITHUB_REPO", "\"ArchiveTune\"")
     }
 
     flavorDimensions += listOf("distribution", "device", "abi")

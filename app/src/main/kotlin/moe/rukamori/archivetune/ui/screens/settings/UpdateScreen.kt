@@ -296,8 +296,8 @@ fun UpdateScreen(
 
         val downloadUrl =
             when (updateChannel) {
-                UpdateChannel.ARTIFACT -> Updater.getLatestCanaryDownloadUrl()
-                UpdateChannel.STABLE -> Updater.getLatestDownloadUrl()
+                UpdateChannel.MY_VERSION -> Updater.getLatestDownloadUrl()
+                UpdateChannel.OFFICIAL_VERSION -> Updater.getOfficialLatestDownloadUrl()
             }
 
         Button(
@@ -325,8 +325,8 @@ fun UpdateScreen(
                 coroutineScope.launch {
                     val releaseResult =
                         when (updateChannel) {
-                            UpdateChannel.ARTIFACT -> Updater.getLatestArtifactReleaseInfo(forceRefresh = true)
-                            UpdateChannel.STABLE -> Updater.getLatestReleaseInfo(forceRefresh = true)
+                            UpdateChannel.MY_VERSION -> Updater.getLatestReleaseInfo(forceRefresh = true)
+                            UpdateChannel.OFFICIAL_VERSION -> Updater.getOfficialLatestReleaseInfo(forceRefresh = true)
                         }
 
                     updateSheetLoading = false
@@ -342,7 +342,7 @@ fun UpdateScreen(
                             if (updateSheetIsSameVersion) {
                                 showUpdateUpToDateDialog = true
                                 onUpToDate()
-                            } else if (updateChannel == UpdateChannel.ARTIFACT) {
+                            } else if (updateChannel == UpdateChannel.MY_VERSION) {
                                 val downloadUrl = Updater.getLatestCanaryDownloadUrl()
                                 installUpdate(downloadUrl)
                             } else {
@@ -458,7 +458,7 @@ fun UpdateScreen(
                 TextButton(
                     onClick = {
                         showArtifactChannelConfirmDialog = false
-                        onUpdateChannelChange(UpdateChannel.ARTIFACT)
+                        onUpdateChannelChange(UpdateChannel.MY_VERSION)
                     },
                 ) {
                     Text(stringResource(android.R.string.ok))
@@ -480,7 +480,7 @@ fun UpdateScreen(
 
         val versionResult =
             when (updateChannel) {
-                UpdateChannel.ARTIFACT -> Updater.getLatestCanaryVersionName()
+                UpdateChannel.MY_VERSION -> Updater.getLatestVersionName()
                 else -> Updater.getLatestVersionName()
             }
         versionResult.onSuccess {
@@ -506,8 +506,8 @@ fun UpdateScreen(
     )
     val topBarSubtitle =
         when (updateChannel) {
-            UpdateChannel.ARTIFACT -> stringResource(R.string.updates_subtitle_artifact)
-            UpdateChannel.STABLE -> channelTitle
+            UpdateChannel.MY_VERSION -> stringResource(R.string.updates_subtitle_artifact)
+            UpdateChannel.OFFICIAL_VERSION -> channelTitle
         }
 
     Scaffold(
@@ -598,9 +598,9 @@ fun UpdateScreen(
                     onAutomaticUpdateChecksChange = { enabled ->
                         onUpdateSettingsAction(UpdateSettingsAction.SetAutomaticChecksEnabled(enabled))
                     },
-                    onStableSelected = { onUpdateChannelChange(UpdateChannel.STABLE) },
+                    onStableSelected = { onUpdateChannelChange(UpdateChannel.OFFICIAL_VERSION) },
                     onArtifactSelected = {
-                        if (updateChannel != UpdateChannel.ARTIFACT) {
+                        if (updateChannel != UpdateChannel.MY_VERSION) {
                             showArtifactChannelConfirmDialog = true
                         }
                     },
@@ -669,13 +669,13 @@ fun UpdateScreen(
         val downloadTitle =
             buildString {
                 when (updateChannel) {
-                    UpdateChannel.ARTIFACT -> {
+                    UpdateChannel.MY_VERSION -> {
                         append(context.getString(R.string.app_name))
                         append(' ')
                         append(context.getString(R.string.channel_artifact))
                     }
 
-                    UpdateChannel.STABLE -> {
+                    UpdateChannel.OFFICIAL_VERSION -> {
                         append(context.getString(R.string.app_name))
                     }
                 }
@@ -902,8 +902,8 @@ private fun UpdateStatusPanel(
 ) {
     val channelLabel =
         when (updateChannel) {
-            UpdateChannel.STABLE -> channelTitle
-            UpdateChannel.ARTIFACT -> stringResource(R.string.channel_artifact)
+            UpdateChannel.OFFICIAL_VERSION -> channelTitle
+            UpdateChannel.MY_VERSION -> stringResource(R.string.channel_artifact)
         }
     val supportingText =
         when {
@@ -924,13 +924,13 @@ private fun UpdateStatusPanel(
             MaterialTheme.colorScheme.onSecondaryContainer
         }
     val channelContainerColor =
-        if (updateChannel == UpdateChannel.ARTIFACT) {
+        if (updateChannel == UpdateChannel.MY_VERSION) {
             MaterialTheme.colorScheme.tertiaryContainer
         } else {
             MaterialTheme.colorScheme.secondaryContainer
         }
     val channelContentColor =
-        if (updateChannel == UpdateChannel.ARTIFACT) {
+        if (updateChannel == UpdateChannel.MY_VERSION) {
             MaterialTheme.colorScheme.onTertiaryContainer
         } else {
             MaterialTheme.colorScheme.onSecondaryContainer
@@ -1030,7 +1030,7 @@ private fun UpdateStatusPanel(
                     Text(text = stringResource(R.string.check_for_update))
                 }
 
-                if (updateChannel == UpdateChannel.STABLE) {
+                if (updateChannel == UpdateChannel.OFFICIAL_VERSION) {
                     TextButton(
                         onClick = onOpenChangelog,
                         modifier =
@@ -1174,7 +1174,7 @@ private fun UpdatePreferencesPanel(
 
                 SingleChoiceSegmentedButtonRow(modifier = Modifier.fillMaxWidth()) {
                     SegmentedButton(
-                        selected = updateChannel == UpdateChannel.STABLE,
+                        selected = updateChannel == UpdateChannel.OFFICIAL_VERSION,
                         onClick = onStableSelected,
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                         icon = {},
@@ -1182,7 +1182,7 @@ private fun UpdatePreferencesPanel(
                         Text(text = channelTitle)
                     }
                     SegmentedButton(
-                        selected = updateChannel == UpdateChannel.ARTIFACT,
+                        selected = updateChannel == UpdateChannel.MY_VERSION,
                         onClick = onArtifactSelected,
                         shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
                         icon = {},

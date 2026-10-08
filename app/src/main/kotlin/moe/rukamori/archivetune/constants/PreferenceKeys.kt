@@ -965,8 +965,8 @@ val TogetherOnlineEndpointLastCheckedAtKey = longPreferencesKey("together_online
 val RedownloadOnRestoreKey = booleanPreferencesKey("redownloadOnRestore")
 
 enum class UpdateChannel {
-    STABLE,
-    ARTIFACT,
+    OFFICIAL_VERSION,
+    MY_VERSION,
     ;
 
     companion object {
@@ -975,7 +975,17 @@ enum class UpdateChannel {
             defaultValue: UpdateChannel,
         ): UpdateChannel =
             when (value) {
-                "NIGHTLY", "DAILY_NIGHTLY", "CANARY" -> ARTIFACT
+                // Legacy migration. The old "STABLE" channel pointed at
+                // this fork's own releases (BuildConfig.RELEASE_GITHUB_*),
+                // which is now MY_VERSION. The old "ARTIFACT" channel and
+                // the nightly/canary names pointed at the fork's workflow
+                // builds, which also collapse into MY_VERSION now.
+                "STABLE",
+                "ARTIFACT",
+                "NIGHTLY",
+                "DAILY_NIGHTLY",
+                "CANARY",
+                -> MY_VERSION
                 else -> entries.firstOrNull { it.name == value } ?: defaultValue
             }
     }
