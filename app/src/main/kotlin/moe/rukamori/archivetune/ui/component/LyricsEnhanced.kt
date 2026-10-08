@@ -563,12 +563,56 @@ fun LyricsEnhanced(
                 ) {
                     val lyricsViewportOffset = remember(maxHeight, viewportOffsetFraction) { maxHeight * viewportOffsetFraction }
 
+                    // Compute the active line index from the library's own
+                    // helper. derivedStateOf means downstream composables
+                    // only see the derived value; the position state that
+                    // feeds it changes 60 times per second but the index
+                    // changes only when the active line actually changes.
+                    val currentLineIndex by androidx.compose.runtime.derivedStateOf {
+                        syncedLyrics.getCurrentFirstHighlightLineIndexByTime(playbackSyncPosition())
+                    }
+
+                    // Auto-scroll the active line into view. Runs only
+                    // when the active line changes.
+                    LaunchedEffect(currentLineIndex, syncedLyrics) {
+                        if (currentLineIndex < 0 ||
+                            currentLineIndex >= syncedLyrics.lines.size
+                        ) return@LaunchedEffect
+                        try {
+                            val viewportHeight = listState.layoutInfo.viewportSize.height
+                            if (viewportHeight > 0) {
+                                listState.animateScrollToItem(
+                                    index = currentLineIndex,
+                                    scrollOffset = -(viewportHeight * 0.30f).toInt(),
+                                )
+                            } else {
+                                listState.animateScrollToItem(currentLineIndex)
+                            }
+                        } catch (c: CancellationException) {
+                            throw c
+                        } catch (_: Exception) {
+                            // User may be scrolling; ignore.
+                        }
+                    }
+
                     CompositionLocalProvider(LocalLayoutDirection provides lyricsLayoutDirection) {
                         key(lyricsSessionKey, syncedLyrics) {
-                            KaraokeLyricsView(
+                            EnhancedLyricsList(
                                 listState = listState,
                                 lyrics = syncedLyrics,
-                                currentPosition = playbackSyncPosition,
+                                currentLineIndex = currentLineIndex,
+                                playbackSyncPosition = playbackSyncPosition,
+                                textColor = textColor,
+                                normalTextStyle = normalTextStyle,
+                                accompanimentTextStyle = accompanimentTextStyle,
+                                phoneticTextStyle = phoneticTextStyle,
+                                showTranslation = showTranslations,
+                                showPhonetic = showPhonetics,
+                                useBlurEffect = lyricsLineBlur,
+                                selectedLineKeys = selectedLineKeySet,
+                                isSelectionModeActive = isSelectionModeActive,
+                                viewportOffset = lyricsViewportOffset,
+                                lineKey = { it.selectionKey() },
                                 onLineClicked = { line ->
                                     if (isSelectionModeActive) {
                                         toggleSelectedLine(line.selectionKey())
@@ -587,16 +631,6 @@ fun LyricsEnhanced(
                                         toggleSelectedLine(lineKey)
                                     }
                                 },
-                                textColor = textColor,
-                                normalLineTextStyle = normalTextStyle,
-                                accompanimentLineTextStyle = accompanimentTextStyle,
-                                phoneticTextStyle = phoneticTextStyle,
-                                blendMode = BlendMode.SrcOver,
-                                useBlurEffect = lyricsLineBlur,
-                                showTranslation = showTranslations,
-                                showPhonetic = showPhonetics,
-                                offset = lyricsViewportOffset,
-                                keepAliveZone = keepAliveZoneDp.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
