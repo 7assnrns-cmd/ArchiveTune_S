@@ -102,9 +102,6 @@ jobs:
     steps:
       - uses: actions/checkout@v7
         with: { submodules: true, fetch-depth: 0 }
-      - uses: actions/setup-python@v6
-        with: { python-version: '3.11' }
-      - run: python scripts/generate_translation_contributors.py
       - uses: actions/setup-java@v5
         with: { java-version: '21', distribution: 'temurin' }
       - uses: gradle/actions/setup-gradle@v6
