@@ -50,7 +50,6 @@ import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableLongStateOf
@@ -64,7 +63,6 @@ import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalConfiguration
@@ -116,7 +114,6 @@ import moe.rukamori.archivetune.constants.PlayerCustomContrastKey
 import moe.rukamori.archivetune.constants.PlayerCustomImageUriKey
 import moe.rukamori.archivetune.constants.ShowLyricsPlayerControlsKey
 import moe.rukamori.archivetune.extensions.togglePlayPause
-import moe.rukamori.archivetune.lyrics.LyricsTextColorMode
 import moe.rukamori.archivetune.models.MediaMetadata
 import moe.rukamori.archivetune.ui.component.LocalMenuState
 import moe.rukamori.archivetune.ui.component.LyricsEnhanced
@@ -181,70 +178,12 @@ fun LyricsScreen(
     val playerCustomBlur by rememberPreference(PlayerCustomBlurKey, 0f)
     val playerCustomContrast by rememberPreference(PlayerCustomContrastKey, 1f)
     val playerCustomBrightness by rememberPreference(PlayerCustomBrightnessKey, 1f)
-    // Resolve the lyrics text colour from the current mode. The default
-    // path keeps the previous behaviour exactly; the dynamic-theme paths
-    // ride MaterialTheme.colorScheme so lyrics track the same palette as
-    // the rest of the UI; the custom path uses the user-provided colour
-    // (with a safe fallback when the stored value is missing).
-    val dynamicThemePrimary = MaterialTheme.colorScheme.primary
-    val dynamicThemeTertiary = MaterialTheme.colorScheme.tertiary
-    val dynamicThemeOnSurface = MaterialTheme.colorScheme.onSurface
-    val rawForegroundColor =
-        remember(
-            lyricsBackground,
-            lyricsRenderState,
-            dynamicThemePrimary,
-            dynamicThemeTertiary,
-            dynamicThemeOnSurface,
-        ) {
-            val mode = (lyricsRenderState as? LyricsRenderScreenState.Success)
-                ?.lyrics
-                ?.preferences
-                ?.textColorMode
-                ?: LyricsTextColorMode.DEFAULT
-            val custom = (lyricsRenderState as? LyricsRenderScreenState.Success)
-                ?.lyrics
-                ?.preferences
-                ?.textColorCustom
-            when (mode) {
-                LyricsTextColorMode.DEFAULT ->
-                    if (lyricsBackground == LyricsBackgroundStyle.FOLLOW_THEME) {
-                        dynamicThemeOnSurface
-                    } else {
-                        Color.White
-                    }
-                LyricsTextColorMode.DYNAMIC_THEME_PRIMARY -> dynamicThemePrimary
-                LyricsTextColorMode.DYNAMIC_THEME_TERTIARY -> dynamicThemeTertiary
-                LyricsTextColorMode.CUSTOM -> custom ?: Color.White
-            }
+    val foregroundColor =
+        if (lyricsBackground == LyricsBackgroundStyle.FOLLOW_THEME) {
+            MaterialTheme.colorScheme.onSurface
+        } else {
+            Color.White
         }
-
-    // Contrast guard: if the resolved text colour does not reach WCAG AA
-    // (4.5:1) against the sampled background, nudge it toward white or
-    // black — whichever gives more contrast — by the minimum amount
-    // needed. This keeps the DYNAMIC_THEME_PRIMARY path legible on very
-    // bright or very dark artwork, where the primary colour can end up
-    // nearly identical to the background.
-    val guardEnabled =
-        (lyricsRenderState as? LyricsRenderScreenState.Success)
-            ?.lyrics
-            ?.preferences
-            ?.textContrastGuard
-            ?: true
-    val contrastThreshold =
-        (lyricsRenderState as? LyricsRenderScreenState.Success)
-            ?.lyrics
-            ?.preferences
-            ?.contrastThreshold
-            ?: 4.5f
-    val contrastBlendStrength =
-        (lyricsRenderState as? LyricsRenderScreenState.Success)
-            ?.lyrics
-            ?.preferences
-            ?.contrastBlendStrength
-            ?: 0.6f
-    // The actual foregroundColor derivation lives below, after
-    // gradientColors is declared, since it reads that state.
     val showPlayerControlsState =
         rememberPreference(ShowLyricsPlayerControlsKey, true)
     val showPlayerControls by showPlayerControlsState
@@ -308,48 +247,9 @@ fun LyricsScreen(
     var sliderPosition by remember(mediaMetadata.id) { mutableStateOf<Long?>(null) }
     var gradientColors by remember(mediaMetadata.thumbnailUrl) { mutableStateOf(AppleMusicFallbackGradient) }
 
-    // Resolve the effective foreground color for lyrics using the
-    // contrast guard. Placed here (rather than next to rawForegroundColor)
-    // because it reads gradientColors, which is declared immediately
-    // above.
-    val foregroundColor =
-        remember(rawForegroundColor, gradientColors, guardEnabled, contrastThreshold, contrastBlendStrength) {
-            if (!guardEnabled || gradientColors.isEmpty()) {
-                return@remember rawForegroundColor
-            }
-            val avgBackground =
-                Color(
-                    red = gradientColors.map { it.red }.average().toFloat(),
-                    green = gradientColors.map { it.green }.average().toFloat(),
-                    blue = gradientColors.map { it.blue }.average().toFloat(),
-                )
-            val bgLum = avgBackground.luminance()
-            val fgLum = rawForegroundColor.luminance()
-            val contrastRatio =
-                if (bgLum > fgLum) {
-                    (bgLum + 0.05f) / (fgLum + 0.05f)
-                } else {
-                    (fgLum + 0.05f) / (bgLum + 0.05f)
-                }
-            if (contrastRatio >= contrastThreshold) return@remember rawForegroundColor
-            // Blend toward whichever endpoint is farther from the
-            // background. Blend strength is user-tunable (default 0.6)
-            // so the user can prefer maximum legibility (1.0 = full
-            // white/black) or maximum colour identity (0.3 = minimal
-            // nudge).
-            val target = if (bgLum > 0.5f) Color.Black else Color.White
-            androidx.compose.ui.graphics.lerp(rawForegroundColor, target, contrastBlendStrength)
-        }
-
     val lyricsDurationMs = durationState.longValue.takeIf { it != C.TIME_UNSET } ?: 0L
     LaunchedEffect(mediaMetadata.id, lyricsDurationMs) {
         lyricsRenderViewModel.bind(mediaMetadata.id, lyricsDurationMs)
-    }
-
-    DisposableEffect(lyricsRenderViewModel) {
-        onDispose {
-            lyricsRenderViewModel.cancel()
-        }
     }
 
     val gradientColorsCache =
@@ -422,17 +322,8 @@ fun LyricsScreen(
     LaunchedEffect(player, playbackState, mediaMetadata.id) {
         if (playbackState != STATE_READY && playbackState != STATE_BUFFERING) return@LaunchedEffect
         while (isActive) {
-            // Guarded writes: while paused / buffering / stalled the position
-            // does not change, so skipping the write avoids recomposing the
-            // slider and time labels on every tick.
-            val newPosition = player.currentPosition.coerceAtLeast(0L)
-            if (positionState.longValue != newPosition) {
-                positionState.longValue = newPosition
-            }
-            val newDuration = player.duration
-            if (durationState.longValue != newDuration) {
-                durationState.longValue = newDuration
-            }
+            positionState.longValue = player.currentPosition.coerceAtLeast(0L)
+            durationState.longValue = player.duration
             delay(250)
         }
     }

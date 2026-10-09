@@ -62,10 +62,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.BlurredEdgeTreatment
@@ -100,7 +96,6 @@ import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import kotlinx.coroutines.Job
 import kotlinx.coroutines.NonCancellable
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -138,12 +133,6 @@ private const val WORD_SYNC_LEAD_MS = 0L
 
 /** Seconds to wait before auto-scroll resumes after manual scroll. */
 private const val MANUAL_SCROLL_TIMEOUT_MS = 3000L
-
-/** Poll interval (ms) for line-synced lyrics while the app is in the foreground. */
-private const val LINE_SYNC_POLL_INTERVAL_MS = 50L
-
-/** Poll interval (ms) for the position loop while the app is backgrounded. */
-private const val MINIMIZED_POLL_INTERVAL_MS = 250L
 
 /** Sentinel entry prepended so auto-scroll has headroom above the first line. */
 private val HEAD_LYRICS_ENTRY = LyricsEntry(time = 0L, text = "")
@@ -199,7 +188,6 @@ fun LyricsV2(
     val glowFactor = preferences?.v2GlowFactor ?: 1f
     val fillTransitionWidth = preferences?.v2FillTransitionWidthDp ?: 8f
     val lrcBounceEnabled = preferences?.v2LrcBounceEnabled ?: true
-    val characterLevelAnimation = preferences?.characterLevelAnimation ?: false
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
     val playerBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.DEFAULT)
 
@@ -212,7 +200,7 @@ fun LyricsV2(
         }
     val lyricsLineBlur = lyricsLineBlurOverride ?: lyricsLineBlurPreference
 
-    val inactiveAlpha = preferences?.inactiveLineAlpha ?: 0.35f
+    val inactiveAlpha = 0.35f
 
     // ── Selection mode state ──
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
@@ -250,80 +238,27 @@ fun LyricsV2(
     var playbackPositionMs by remember { mutableLongStateOf(0L) }
     var currentLineIndex by remember { mutableIntStateOf(0) }
 
-    // ── Lifecycle gate ──
-    // Stops the high-frequency position loop while the app is not in the
-    // foreground. When ON_START fires, the effect restarts and the very
-    // first iteration reads player.currentPosition, so no reconciliation
-    // is needed — the loop simply picks up where the player actually is.
-    var isAppMinimized by remember { mutableStateOf(false) }
-    val lyricsLifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(lyricsLifecycleOwner) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_STOP -> isAppMinimized = true
-                    Lifecycle.Event.ON_START -> isAppMinimized = false
-                    else -> Unit
-                }
-            }
-        lyricsLifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { lyricsLifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(entriesWithWords, isSynced, leadMs, lyricsSyncOffset, isAppMinimized) {
+    LaunchedEffect(entriesWithWords, isSynced, leadMs, lyricsSyncOffset) {
         if (!isSynced || entriesWithWords.isEmpty()) return@LaunchedEffect
+        val pollIntervalMs = if (isWordSyncedFormat) 16L else 50L
         while (isActive) {
-            if (isAppMinimized) {
-                // Background: keep the coroutine alive but stop doing work.
-                delay(MINIMIZED_POLL_INTERVAL_MS)
-                continue
-            }
-
-            if (isWordSyncedFormat) {
-                // Frame-aligned polling for word-level karaoke. Using
-                // withFrameNanos instead of delay(16) ties the update to the
-                // render pipeline so we never tick more often than the
-                // display can actually consume.
-                withFrameNanos { }
-            } else {
-                delay(LINE_SYNC_POLL_INTERVAL_MS)
-            }
-
             val sliderPos = sliderPositionProvider()
             val pos = sliderPos ?: player.currentPosition
 
-            val newPlaybackPositionMs = (pos + lyricsSyncOffset.toLong()).coerceAtLeast(0L)
-            val newCurrentPositionMs = (newPlaybackPositionMs + leadMs).coerceAtLeast(0L)
+            playbackPositionMs = (pos + lyricsSyncOffset.toLong()).coerceAtLeast(0L)
+            currentPositionMs = (playbackPositionMs + leadMs).coerceAtLeast(0L)
 
-            if (playbackPositionMs != newPlaybackPositionMs) {
-                playbackPositionMs = newPlaybackPositionMs
-            }
-            if (currentPositionMs != newCurrentPositionMs) {
-                currentPositionMs = newCurrentPositionMs
-            }
-
-            val newLineIndex = findCurrentLineIndex(entriesWithWords, newCurrentPositionMs, 0L)
-            if (currentLineIndex != newLineIndex) {
-                currentLineIndex = newLineIndex
-            }
+            currentLineIndex = findCurrentLineIndex(entriesWithWords, currentPositionMs, 0L)
+            delay(pollIntervalMs)
         }
     }
 
     // ── Scroll State ──
     val listState = rememberLazyListState()
     var isManualScrolling by remember { mutableStateOf(false) }
+    var lastManualScrollTime by remember { mutableLongStateOf(0L) }
 
-    // Detect manual scrolling.
-    //
-    // The idle-timeout that clears isManualScrolling is driven by a Job
-    // held in a MutableState rather than by a LaunchedEffect keyed on a
-    // timestamp. The previous version wrote System.currentTimeMillis() on
-    // every scroll event, which changed the LaunchedEffect key on every
-    // pixel of scroll and recomposed the entire lyrics list per frame
-    // during the gesture.
-    val manualScrollResetJob = remember { mutableStateOf<Job?>(null) }
-    val manualScrollResetScope = rememberCoroutineScope()
-
+    // Detect manual scrolling
     val nestedScrollConnection =
         remember {
             object : NestedScrollConnection {
@@ -333,17 +268,20 @@ fun LyricsV2(
                 ): Offset {
                     if (!isSelectionModeActive && source == NestedScrollSource.UserInput) {
                         isManualScrolling = true
-                        manualScrollResetJob.value?.cancel()
-                        manualScrollResetJob.value =
-                            manualScrollResetScope.launch {
-                                delay(MANUAL_SCROLL_TIMEOUT_MS)
-                                isManualScrolling = false
-                            }
+                        lastManualScrollTime = System.currentTimeMillis()
                     }
                     return Offset.Zero
                 }
             }
         }
+
+    // Resume auto-scroll after timeout
+    LaunchedEffect(isManualScrolling, lastManualScrollTime) {
+        if (isManualScrolling) {
+            delay(MANUAL_SCROLL_TIMEOUT_MS)
+            isManualScrolling = false
+        }
+    }
 
     // Auto-scroll to active line
     LaunchedEffect(currentLineIndex, isManualScrolling, lyricsScroll) {
@@ -818,24 +756,11 @@ fun LyricsV2(
                         }
 
                         if (item.words != null && isSynced) {
-                            // Only the active line needs a live position feed for
-                            // word-level karaoke. Lines above are fully past
-                            // (all words complete); lines below have not started
-                            // (no word active). Passing a sentinel value for
-                            // those cases means the item lambda never reads
-                            // `currentPositionMs` unless it is the active line,
-                            // so it is not invalidated ~60x/second.
-                            val linePositionMs =
-                                when {
-                                    isActive -> currentPositionMs
-                                    isPast -> Long.MAX_VALUE
-                                    else -> 0L
-                                }
                             LyricsLineV2(
                                 words = item.words!!,
                                 isActive = isActive,
                                 isPast = isPast,
-                                currentPositionMs = linePositionMs,
+                                currentPositionMs = currentPositionMs,
                                 textColor = textColor,
                                 inactiveAlpha = inactiveAlpha,
                                 baseFontSize = lyricsTextSize,
@@ -846,7 +771,6 @@ fun LyricsV2(
                                 bounceFactor = bounceFactor,
                                 glowFactor = glowFactor,
                                 fillTransitionWidth = fillTransitionWidth,
-                                characterLevelAnimation = characterLevelAnimation,
                             )
                         } else if (isSynced) {
                             LyricsLineLrcBounce(
@@ -1141,7 +1065,6 @@ private fun LyricsLineV2(
     bounceFactor: Float,
     glowFactor: Float,
     fillTransitionWidth: Float,
-    characterLevelAnimation: Boolean,
 ) {
     val arrangement =
         when (textAlign) {
@@ -1193,7 +1116,6 @@ private fun LyricsLineV2(
                     bounceFactor = bounceFactor,
                     glowFactor = glowFactor,
                     fillTransitionWidth = fillTransitionWidth,
-                    characterLevelAnimation = characterLevelAnimation,
                 )
             }
         }
@@ -1237,7 +1159,6 @@ private fun LyricsLineV2(
                     bounceFactor = bounceFactor,
                     glowFactor = glowFactor,
                     fillTransitionWidth = fillTransitionWidth,
-                    characterLevelAnimation = characterLevelAnimation,
                 )
             }
         }
@@ -1264,36 +1185,7 @@ private fun AnimatedWordV2(
     bounceFactor: Float,
     glowFactor: Float,
     fillTransitionWidth: Float,
-    characterLevelAnimation: Boolean = false,
 ) {
-    // Optional character-by-character rendering. Only enabled for scripts
-    // that render safely when isolated; RTL and complex-script shaping
-    // would break if we split mid-word, so those fall back to the
-    // existing whole-word animation.
-    val useCharacterMode =
-        characterLevelAnimation &&
-            word.text.length > 1 &&
-            word.text != " " &&
-            word.text != "\n" &&
-            isSafeForCharacterSplit(word.text)
-    if (useCharacterMode) {
-        AnimatedWordCharactersV2(
-            word = word,
-            isLineActive = isLineActive,
-            isLinePast = isLinePast,
-            currentPositionMs = currentPositionMs,
-            textColor = textColor,
-            inactiveAlpha = inactiveAlpha,
-            fontSize = fontSize,
-            isBackground = isBackground,
-            lyricsFontFamily = lyricsFontFamily,
-            isRtl = isRtl,
-            bounceFactor = bounceFactor,
-            glowFactor = glowFactor,
-        )
-        return
-    }
-
     val wordStartMs = (word.startTime * 1000).roundToLong()
     val wordEndMs = (word.endTime * 1000).roundToLong()
     val wordDuration = (wordEndMs - wordStartMs).coerceAtLeast(1L)
@@ -1658,243 +1550,3 @@ private fun InstrumentalBreakItem(
         }
     }
 }
-
-// ──────────────────────────────────────────────────────────────────────
-// Character-level (letter-by-letter) V2 animation
-// ──────────────────────────────────────────────────────────────────────
-
-/**
- * Character-by-character variant of the word-level animation.
- *
- * Each grapheme (user-perceived character) receives an equal slice of
- * the word's timing window, so the singer's words ripple through the
- * line as individual letters rise and fade in. Scripts that cannot be
- * split mid-word (Arabic, Devanagari, Thai, etc.) never reach this
- * function — [isSafeForCharacterSplit] gates the call site.
- */
-@Composable
-private fun AnimatedWordCharactersV2(
-    word: WordTimestamp,
-    isLineActive: Boolean,
-    isLinePast: Boolean,
-    currentPositionMs: Long,
-    textColor: Color,
-    inactiveAlpha: Float,
-    fontSize: Float,
-    isBackground: Boolean,
-    lyricsFontFamily: FontFamily?,
-    isRtl: Boolean,
-    bounceFactor: Float,
-    glowFactor: Float,
-) {
-    val graphemes = remember(word.text) { word.text.toCharacterGraphemes() }
-    if (graphemes.isEmpty()) return
-
-    val wordStartMs = (word.startTime * 1000).roundToLong()
-    val wordEndMs = (word.endTime * 1000).roundToLong()
-    val wordDuration = (wordEndMs - wordStartMs).coerceAtLeast(1L)
-    val graphemeCount = graphemes.size
-    val actualFontSize = if (isBackground) fontSize * 0.85f else fontSize
-    val fontWeight = if (isLineActive || isLinePast) FontWeight.ExtraBold else FontWeight.SemiBold
-
-    Row {
-        graphemes.forEachIndexed { index, grapheme ->
-            val charStartMs = wordStartMs + (wordDuration * index / graphemeCount)
-            val charEndMs = wordStartMs + (wordDuration * (index + 1) / graphemeCount)
-            AnimatedCharacterV2(
-                character = grapheme,
-                charStartMs = charStartMs,
-                charEndMs = charEndMs,
-                currentPositionMs = currentPositionMs,
-                textColor = textColor,
-                inactiveAlpha = inactiveAlpha,
-                actualFontSize = actualFontSize,
-                fontWeight = fontWeight,
-                isBackground = isBackground,
-                lyricsFontFamily = lyricsFontFamily,
-                isRtl = isRtl,
-                bounceFactor = bounceFactor,
-                glowFactor = glowFactor,
-            )
-        }
-    }
-}
-
-@Composable
-private fun AnimatedCharacterV2(
-    character: String,
-    charStartMs: Long,
-    charEndMs: Long,
-    currentPositionMs: Long,
-    textColor: Color,
-    inactiveAlpha: Float,
-    actualFontSize: Float,
-    fontWeight: FontWeight,
-    isBackground: Boolean,
-    lyricsFontFamily: FontFamily?,
-    isRtl: Boolean,
-    bounceFactor: Float,
-    glowFactor: Float,
-) {
-    val charDuration = (charEndMs - charStartMs).coerceAtLeast(1L)
-    val isCharComplete = currentPositionMs >= charEndMs
-    val isCharActive = currentPositionMs in charStartMs until charEndMs
-    val isCharStarted = currentPositionMs >= charStartMs
-    val progress =
-        when {
-            isCharComplete -> 1f
-            currentPositionMs <= charStartMs -> 0f
-            else -> ((currentPositionMs - charStartMs).toFloat() / charDuration).coerceIn(0f, 1f)
-        }
-
-    // Rise-and-stay per character. Each grapheme rises once its syllable
-    // begins and keeps its lift for the rest of the line, so the word
-    // appears to climb letter by letter instead of bouncing as a unit.
-    val riseAmount = -4f * bounceFactor
-    val targetFloat = if (isCharStarted) riseAmount else 0f
-    val floatOffset by androidx.compose.animation.core.animateFloatAsState(
-        targetValue = targetFloat,
-        animationSpec =
-            androidx.compose.animation.core.tween(
-                durationMillis = 120,
-                easing = androidx.compose.animation.core.FastOutSlowInEasing,
-            ),
-        label = "v2CharRise",
-    )
-    // Scale remains a brief pulse while the character is actively being
-    // sung, so the "current letter" reads as alive rather than static.
-    val sinProgress = kotlin.math.sin(progress * kotlin.math.PI).toFloat()
-    val charScale = 1f + (0.02f * bounceFactor * sinProgress)
-
-    val glowProgress = (progress * 2f).coerceAtMost(1f)
-    val glowAlpha = if (isCharActive) glowProgress * 0.45f * glowFactor else 0f
-    val glowRadius = if (isCharActive) glowProgress * 12f * glowFactor else 0f
-    val overlayAlpha = if (isBackground) 0.75f else 1f
-    val baseAlpha = if (isBackground) inactiveAlpha * 0.7f else inactiveAlpha
-    val glowPadding = 10.dp
-
-    Box(
-        modifier =
-            Modifier
-                .layout { measurable, constraints ->
-                    val glowPaddingPx = glowPadding.roundToPx()
-                    val looseConstraints =
-                        constraints.copy(
-                            minWidth = 0,
-                            maxWidth = constraints.maxWidth,
-                            minHeight = 0,
-                            maxHeight = Constraints.Infinity,
-                        )
-                    val placeable = measurable.measure(looseConstraints)
-                    val coreWidth = (placeable.width - glowPaddingPx * 2).coerceAtLeast(0)
-                    val coreHeight = (placeable.height - glowPaddingPx * 2).coerceAtLeast(0)
-                    layout(coreWidth, coreHeight) {
-                        placeable.place(-glowPaddingPx, -glowPaddingPx)
-                    }
-                }
-                .graphicsLayer {
-                    clip = false
-                    translationY = floatOffset * density
-                    scaleX = charScale
-                    scaleY = charScale
-                },
-    ) {
-        Text(
-            text = character,
-            style =
-                MaterialTheme.typography.headlineMedium.copy(
-                    fontSize = actualFontSize.sp,
-                    fontWeight = fontWeight,
-                    fontStyle = FontStyle.Normal,
-                    lineHeight = (actualFontSize * 1.35f).sp,
-                    fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
-                ),
-            color = textColor.copy(alpha = baseAlpha),
-            modifier = Modifier.padding(glowPadding),
-        )
-        if (isCharComplete || isCharActive) {
-            Text(
-                text = character,
-                style =
-                    MaterialTheme.typography.headlineMedium.copy(
-                        fontSize = actualFontSize.sp,
-                        fontWeight = fontWeight,
-                        fontStyle = FontStyle.Normal,
-                        lineHeight = (actualFontSize * 1.35f).sp,
-                        fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
-                        shadow =
-                            if (glowAlpha > 0f) {
-                                Shadow(
-                                    color = textColor.copy(alpha = glowAlpha),
-                                    offset = Offset.Zero,
-                                    blurRadius = glowRadius.coerceAtLeast(1f),
-                                )
-                            } else {
-                                null
-                            },
-                    ),
-                color = textColor.copy(alpha = overlayAlpha * progress),
-                modifier = Modifier.padding(glowPadding),
-            )
-        }
-    }
-}
-
-/**
- * Returns false when [text] contains a script that would break if the
- * word were split into isolated graphemes (contextual letter shaping).
- */
-private fun isSafeForCharacterSplit(text: String): Boolean {
-    for (ch in text) {
-        val script = java.lang.Character.UnicodeScript.of(ch.code)
-        when (script) {
-            java.lang.Character.UnicodeScript.ARABIC,
-            java.lang.Character.UnicodeScript.SYRIAC,
-            java.lang.Character.UnicodeScript.THAANA,
-            java.lang.Character.UnicodeScript.DEVANAGARI,
-            java.lang.Character.UnicodeScript.BENGALI,
-            java.lang.Character.UnicodeScript.GURMUKHI,
-            java.lang.Character.UnicodeScript.GUJARATI,
-            java.lang.Character.UnicodeScript.ORIYA,
-            java.lang.Character.UnicodeScript.TAMIL,
-            java.lang.Character.UnicodeScript.TELUGU,
-            java.lang.Character.UnicodeScript.KANNADA,
-            java.lang.Character.UnicodeScript.MALAYALAM,
-            java.lang.Character.UnicodeScript.SINHALA,
-            java.lang.Character.UnicodeScript.THAI,
-            java.lang.Character.UnicodeScript.LAO,
-            java.lang.Character.UnicodeScript.TIBETAN,
-            java.lang.Character.UnicodeScript.MYANMAR,
-            java.lang.Character.UnicodeScript.KHMER,
-            -> return false
-            else -> Unit
-        }
-    }
-    return true
-}
-
-/**
- * Splits [this] into user-perceived characters using the platform's
- * BreakIterator, so emoji (surrogate pairs), combining marks, and
- * regional indicators stay intact. Falls back to per-code-unit
- * splitting if BreakIterator is unavailable.
- */
-private fun String.toCharacterGraphemes(): List<String> {
-    if (isEmpty()) return emptyList()
-    return runCatching {
-        val iterator = java.text.BreakIterator.getCharacterInstance()
-        iterator.setText(this)
-        val result = ArrayList<String>(length)
-        var start = iterator.first()
-        var end = iterator.next()
-        while (end != java.text.BreakIterator.DONE) {
-            result += substring(start, end)
-            start = end
-            end = iterator.next()
-        }
-        result
-    }.getOrElse {
-        map { it.toString() }
-    }
-}
-

@@ -69,9 +69,6 @@ import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.LifecycleEventObserver
-import androidx.lifecycle.compose.LocalLifecycleOwner
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
@@ -95,7 +92,6 @@ import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeSyllable
 import com.mocharealm.accompanist.lyrics.core.model.synced.SyncedLine
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
 import kotlinx.coroutines.delay
-import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.isActive
 import moe.rukamori.archivetune.LocalAnimationsDisabled
 import moe.rukamori.archivetune.LocalPlayerConnection
@@ -105,9 +101,7 @@ import moe.rukamori.archivetune.constants.PlayerBackgroundStyleKey
 import moe.rukamori.archivetune.lyrics.LyricsEntry
 import moe.rukamori.archivetune.lyrics.LyricsSourceFormat
 import moe.rukamori.archivetune.lyrics.LyricsSyncType
-import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
 import moe.rukamori.archivetune.lyrics.LyricsTextDirection
-import moe.rukamori.archivetune.lyrics.LyricsVisibilityOverride
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
 import moe.rukamori.archivetune.lyrics.WordTimestamp
 import moe.rukamori.archivetune.lyrics.toLyricsEntries
@@ -149,16 +143,6 @@ fun LyricsEnhanced(
     val lyricsClick = preferences?.clickEnabled ?: true
     val lyricsTextSize = preferences?.textSizeSp ?: 26f
     val lyricsLineBlurPreference = preferences?.lineBlurEnabled ?: true
-    val enhancedAccompanimentScale = preferences?.enhancedAccompanimentScale ?: 0.82f
-    val enhancedPhoneticScale = preferences?.enhancedPhoneticScale ?: 0.55f
-    val enhancedLineSpacing = preferences?.enhancedLineSpacing ?: 1.3f
-    val enhancedFontWeight = preferences?.enhancedFontWeight ?: LyricsEnhancedFontWeight.BOLD
-    val viewportOffsetFraction = preferences?.viewportOffsetFraction ?: 0.38f
-    val keepAliveZoneDp = preferences?.keepAliveZoneDp ?: 72
-    val selectionLimit = preferences?.selectionLimit ?: 5
-    val translationOverride = preferences?.translationOverride ?: LyricsVisibilityOverride.AUTO
-    val phoneticOverride = preferences?.phoneticOverride ?: LyricsVisibilityOverride.AUTO
-    val smoothPlaybackEnabled = preferences?.smoothPlaybackEnabled ?: true
 
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
 
@@ -174,27 +158,15 @@ fun LyricsEnhanced(
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
     val selectedLineKeys = remember { mutableStateListOf<String>() }
     var showMaxSelectionToast by remember { mutableStateOf(false) }
-    val maxSelectionLimit = selectionLimit
+    val maxSelectionLimit = 5
     var showShareDialog by remember { mutableStateOf(false) }
     var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showShareImageDialog by remember { mutableStateOf(false) }
 
-    val hasTranslationData =
-        preparedLyrics?.lines?.any { line -> line.translation != null } == true
     val showTranslations =
-        when (translationOverride) {
-            LyricsVisibilityOverride.AUTO -> hasTranslationData
-            LyricsVisibilityOverride.ALWAYS_ON -> true
-            LyricsVisibilityOverride.ALWAYS_OFF -> false
-        }
-    val hasPhoneticData =
-        preparedLyrics?.lines?.any { line -> line.romanizedText != null || line.phonetics.isNotEmpty() } == true
+        preparedLyrics?.lines?.any { line -> line.translation != null } == true
     val showPhonetics =
-        when (phoneticOverride) {
-            LyricsVisibilityOverride.AUTO -> hasPhoneticData
-            LyricsVisibilityOverride.ALWAYS_ON -> true
-            LyricsVisibilityOverride.ALWAYS_OFF -> false
-        }
+        preparedLyrics?.lines?.any { line -> line.romanizedText != null || line.phonetics.isNotEmpty() } == true
     val baseLayoutDirection = LocalLayoutDirection.current
     val lyricsLayoutDirection =
         remember(preparedLyrics?.lines, baseLayoutDirection) {
@@ -248,7 +220,6 @@ fun LyricsEnhanced(
     val latestLyricsSyncOffset = rememberUpdatedState(lyricsSyncOffset)
     val latestLeadMs = rememberUpdatedState(leadMs)
     val latestPlaybackSpeed = rememberUpdatedState(playbackParameters.speed)
-    val latestSmoothPlaybackEnabled = rememberUpdatedState(smoothPlaybackEnabled)
     val playbackPositionMs =
         remember(player) {
             mutableLongStateOf(player.currentPosition.coerceAtLeast(0L))
@@ -261,40 +232,13 @@ fun LyricsEnhanced(
         selectedLineKeys.clear()
     }
 
-    // ── Lifecycle gate ──
-    // Stop the position loop while the app is not in the foreground so a
-    // paused / backgrounded player does not keep waking up at 10 Hz via
-    // delay(100) for no reason. When ON_START fires, the loop resumes and
-    // reads player.currentPosition on its first iteration.
-    var isAppMinimized by remember { mutableStateOf(false) }
-    val enhancedLifecycleOwner = LocalLifecycleOwner.current
-    DisposableEffect(enhancedLifecycleOwner) {
-        val observer =
-            LifecycleEventObserver { _, event ->
-                when (event) {
-                    Lifecycle.Event.ON_STOP -> isAppMinimized = true
-                    Lifecycle.Event.ON_START -> isAppMinimized = false
-                    else -> Unit
-                }
-            }
-        enhancedLifecycleOwner.lifecycle.addObserver(observer)
-        onDispose { enhancedLifecycleOwner.lifecycle.removeObserver(observer) }
-    }
-
-    LaunchedEffect(player, lyricsSessionKey, animationsDisabled, playbackParameters.speed, isAppMinimized) {
+    LaunchedEffect(player, lyricsSessionKey, animationsDisabled, playbackParameters.speed) {
         var smoothedPositionMs = player.currentPosition.coerceAtLeast(0L).toDouble()
         var previousFrameNanos = 0L
         while (isActive) {
-            if (isAppMinimized) {
-                // Background: suspend the loop entirely. We still keep the
-                // coroutine alive so that resuming is instant.
-                delay(250L)
-                previousFrameNanos = 0L
-                continue
-            }
             val sliderPosition = latestSliderPositionProvider.value()
             val rawPosition = (sliderPosition ?: player.currentPosition).coerceAtLeast(0L)
-            if (sliderPosition != null || !player.isPlaying || animationsDisabled || !latestSmoothPlaybackEnabled.value) {
+            if (sliderPosition != null || !player.isPlaying || animationsDisabled) {
                 smoothedPositionMs = rawPosition.toDouble()
                 previousFrameNanos = 0L
                 if (playbackPositionMs.longValue != rawPosition) {
@@ -379,27 +323,20 @@ fun LyricsEnhanced(
         }
     }
 
-    val activeFontWeight =
-        when (enhancedFontWeight) {
-            LyricsEnhancedFontWeight.SEMI_BOLD -> FontWeight.SemiBold
-            LyricsEnhancedFontWeight.BOLD -> FontWeight.Bold
-            LyricsEnhancedFontWeight.EXTRA_BOLD -> FontWeight.ExtraBold
-        }
     val normalTextStyle =
         MaterialTheme.typography.headlineMedium.copy(
             fontSize = lyricsTextSize.sp,
-            fontWeight = activeFontWeight,
+            fontWeight = FontWeight.Bold,
             fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
-            lineHeight = (lyricsTextSize * enhancedLineSpacing).sp,
         )
     val accompanimentTextStyle =
         MaterialTheme.typography.titleLarge.copy(
-            fontSize = (lyricsTextSize * enhancedAccompanimentScale).sp,
+            fontSize = (lyricsTextSize * 0.82f).sp,
             fontFamily = lyricsFontFamily ?: MaterialTheme.typography.titleLarge.fontFamily,
         )
     val phoneticTextStyle =
         MaterialTheme.typography.bodyMedium.copy(
-            fontSize = (lyricsTextSize * enhancedPhoneticScale).sp,
+            fontSize = (lyricsTextSize * 0.55f).sp,
             fontWeight = FontWeight.Normal,
         )
     val plainLyrics =
@@ -562,58 +499,14 @@ fun LyricsEnhanced(
                 BoxWithConstraints(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    val lyricsViewportOffset = remember(maxHeight, viewportOffsetFraction) { maxHeight * viewportOffsetFraction }
-
-                    // Compute the active line index from the library's own
-                    // helper. derivedStateOf means downstream composables
-                    // only see the derived value; the position state that
-                    // feeds it changes 60 times per second but the index
-                    // changes only when the active line actually changes.
-                    val currentLineIndex by androidx.compose.runtime.derivedStateOf {
-                        syncedLyrics.getCurrentFirstHighlightLineIndexByTime(playbackSyncPosition())
-                    }
-
-                    // Auto-scroll the active line into view. Runs only
-                    // when the active line changes.
-                    LaunchedEffect(currentLineIndex, syncedLyrics) {
-                        if (currentLineIndex < 0 ||
-                            currentLineIndex >= syncedLyrics.lines.size
-                        ) return@LaunchedEffect
-                        try {
-                            val viewportHeight = listState.layoutInfo.viewportSize.height
-                            if (viewportHeight > 0) {
-                                listState.animateScrollToItem(
-                                    index = currentLineIndex,
-                                    scrollOffset = -(viewportHeight * 0.30f).toInt(),
-                                )
-                            } else {
-                                listState.animateScrollToItem(currentLineIndex)
-                            }
-                        } catch (c: CancellationException) {
-                            throw c
-                        } catch (_: Exception) {
-                            // User may be scrolling; ignore.
-                        }
-                    }
+                    val lyricsViewportOffset = remember(maxHeight) { maxHeight * 0.38f }
 
                     CompositionLocalProvider(LocalLayoutDirection provides lyricsLayoutDirection) {
                         key(lyricsSessionKey, syncedLyrics) {
-                            EnhancedLyricsList(
+                            KaraokeLyricsView(
                                 listState = listState,
                                 lyrics = syncedLyrics,
-                                currentLineIndex = currentLineIndex,
-                                playbackSyncPosition = playbackSyncPosition,
-                                textColor = textColor,
-                                normalTextStyle = normalTextStyle,
-                                accompanimentTextStyle = accompanimentTextStyle,
-                                phoneticTextStyle = phoneticTextStyle,
-                                showTranslation = showTranslations,
-                                showPhonetic = showPhonetics,
-                                useBlurEffect = lyricsLineBlur,
-                                selectedLineKeys = selectedLineKeySet,
-                                isSelectionModeActive = isSelectionModeActive,
-                                viewportOffset = lyricsViewportOffset,
-                                lineKey = { it.selectionKey() },
+                                currentPosition = playbackSyncPosition,
                                 onLineClicked = { line ->
                                     if (isSelectionModeActive) {
                                         toggleSelectedLine(line.selectionKey())
@@ -632,6 +525,16 @@ fun LyricsEnhanced(
                                         toggleSelectedLine(lineKey)
                                     }
                                 },
+                                textColor = textColor,
+                                normalLineTextStyle = normalTextStyle,
+                                accompanimentLineTextStyle = accompanimentTextStyle,
+                                phoneticTextStyle = phoneticTextStyle,
+                                blendMode = BlendMode.SrcOver,
+                                useBlurEffect = lyricsLineBlur,
+                                showTranslation = showTranslations,
+                                showPhonetic = showPhonetics,
+                                offset = lyricsViewportOffset,
+                                keepAliveZone = 72.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         }
@@ -1140,22 +1043,25 @@ private fun buildLineSyncedLrcLine(
     val translation = providedTranslationTextForEntry(entry)
     val normalizedRomanizedText = romanizedText?.trim()?.takeIf { it.isNotEmpty() }
 
-    // Line-synced lyrics highlight the whole line at once. Splitting the
-    // text into per-character syllables (as an earlier draft did) makes
-    // the library lay out each character as an independent unit, which
-    // causes wrapping, size and baseline mismatches on screen. When a
-    // romanization is present, attach it to the single syllable covering
-    // the line, so the phonetic label renders alongside the line text
-    // without splitting the highlight.
-    val syllable = KaraokeSyllable(
-        content = entry.text,
-        start = start,
-        end = end.coerceAtLeast(start + MIN_KARAOKE_SYLLABLE_DURATION_MS),
-        phonetic = normalizedRomanizedText,
-    )
+    if (normalizedRomanizedText == null) {
+        return SyncedLine(
+            content = entry.text,
+            translation = translation,
+            start = start,
+            end = end,
+        )
+    }
+
+    val syllables =
+        buildWrappingKaraokeSyllables(
+            content = entry.text,
+            romanizedText = normalizedRomanizedText,
+            start = start,
+            end = end,
+        )
 
     return KaraokeLine.MainKaraokeLine(
-        syllables = listOf(syllable),
+        syllables = syllables,
         translation = translation,
         alignment = KaraokeAlignment.Start,
         start = start,
