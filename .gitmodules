@@ -7,3 +7,7 @@
 [submodule "morideobfuscator"]
 	path = morideobfuscator
 	url = https://github.com/rukamori/morideobfuscator.git
+
+[submodule "lyrics"]
+	path = lyrics
+	url = https://github.com/7assnrns-cmd/lyrics_S.git
