@@ -16,6 +16,7 @@ import io.ktor.client.statement.bodyAsText
 import io.ktor.http.HttpStatusCode
 import kotlinx.coroutines.CancellationException
 import moe.rukamori.archivetune.App
+import moe.rukamori.archivetune.updates.ApkAsset
 import moe.rukamori.archivetune.BuildConfig
 import moe.rukamori.archivetune.constants.CanaryReleasesEtagKey
 import moe.rukamori.archivetune.constants.CanaryReleasesFingerprintKey
@@ -44,6 +45,7 @@ data class ReleaseInfo(
     val publishedAt: String,
     val htmlUrl: String,
     val downloadUrl: String? = null,
+    val apkAssets: List<ApkAsset> = emptyList(),
 )
 
 private data class ReleasesNetworkResult(
@@ -115,6 +117,45 @@ object Updater {
         val artifactUrl =
             "https://nightly.link/$githubOwner/$githubRepo/workflows/build/dev/${workflowArtifactName()}"
         return if (canDownloadUpdatesDirectly) "$artifactUrl.zip" else artifactUrl
+    }
+
+    /**
+     * Extract the flavor suffix from an APK filename of the form
+     * `app-<distribution>-<device>-<arch>-release.apk`. Returns null if the
+     * name does not match or the suffix is not one we know about.
+     */
+    private fun extractArchFromApkName(name: String): String? {
+        val m = Regex("""app-[^-]+-[^-]+-(.+?)-release\.apk""", RegexOption.IGNORE_CASE)
+            .find(name) ?: return null
+        val raw = m.groupValues.getOrNull(1)?.lowercase() ?: return null
+        return raw.takeIf { it in setOf("universal", "arm64", "armeabi", "x86_64", "x86") }
+    }
+
+    private fun displayNameForArch(arch: String): String =
+        when (arch) {
+            "arm64" -> "arm64-v8a"
+            "armeabi" -> "armeabi-v7a"
+            "x86_64" -> "x86_64"
+            "x86" -> "x86"
+            "universal" -> "Universal (all devices)"
+            else -> arch
+        }
+
+    /**
+     * Best-effort mapping from the runtime ABI list to our flavor suffix.
+     * Returns null if none of the device ABIs match a build we ship.
+     */
+    fun detectDeviceArchitecture(): String? {
+        val abis = android.os.Build.SUPPORTED_ABIS
+        for (abi in abis) {
+            when (abi.lowercase()) {
+                "arm64-v8a" -> return "arm64"
+                "armeabi-v7a", "armeabi" -> return "armeabi"
+                "x86_64" -> return "x86_64"
+                "x86" -> return "x86"
+            }
+        }
+        return null
     }
 
     private data class SemVer(
@@ -285,6 +326,30 @@ object Updater {
                         ?.optString("browser_download_url")
                         ?.takeIf { it.isNotBlank() }
                 }
+            // Collect every APK attached to this release so the download
+            // picker can offer the device-specific build and the universal
+            // build side by side. Releases before v1.3.0 only have the
+            // universal asset; the list will just contain that one entry.
+            val apkAssets =
+                assets?.let { arr ->
+                    (0 until arr.length())
+                        .asSequence()
+                        .mapNotNull(arr::optJSONObject)
+                        .filter { it.optString("name").endsWith(".apk", ignoreCase = true) }
+                        .mapNotNull { a ->
+                            val name = a.optString("name")
+                            val url = a.optString("browser_download_url")
+                            val arch = extractArchFromApkName(name) ?: return@mapNotNull null
+                            if (url.isBlank()) return@mapNotNull null
+                            ApkAsset(
+                                architecture = arch,
+                                displayName = displayNameForArch(arch),
+                                url = url,
+                                sizeBytes = a.optLong("size", 0L),
+                            )
+                        }
+                        .toList()
+                } ?: emptyList()
             releases.add(
                 ReleaseInfo(
                     tagName = item.optString("tag_name", ""),
@@ -299,6 +364,7 @@ object Updater {
                             item.optString("download_url").takeIf { it.isNotBlank() }
                         }
                             ?: assetDownloadUrl,
+                    apkAssets = apkAssets,
                 ),
             )
         }

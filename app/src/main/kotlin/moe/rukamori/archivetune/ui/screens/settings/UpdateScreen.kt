@@ -113,6 +113,7 @@ import moe.rukamori.archivetune.constants.AutoDownloadUpdatesKey
 import moe.rukamori.archivetune.constants.UpdatesAutoInstallKey
 import moe.rukamori.archivetune.constants.UpdatesDownloadedApkVersionKey
 import moe.rukamori.archivetune.constants.UpdatesWifiOnlyKey
+import moe.rukamori.archivetune.updates.ApkAsset
 import moe.rukamori.archivetune.updates.UpdateApkStorage
 import moe.rukamori.archivetune.updates.UpdateDownloadScheduler
 import moe.rukamori.archivetune.defaultUpdateChannel
@@ -217,6 +218,9 @@ fun UpdateScreen(
     var updateCheckJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var showUpdateUpToDateDialog by remember { mutableStateOf(false) }
     var showUpdateErrorDialog by remember { mutableStateOf(false) }
+    var updateSheetApkAssets by remember { mutableStateOf<List<ApkAsset>>(emptyList()) }
+    var showAbiPickerDialog by remember { mutableStateOf(false) }
+    var pendingDownloadMethod by remember { mutableStateOf<DownloadMethod?>(null) }
     var updateDownloadProgress by remember { mutableStateOf<Float?>(null) }
     var updateDownloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var showUpdateDownloadDialog by remember { mutableStateOf(false) }
@@ -236,28 +240,41 @@ fun UpdateScreen(
         }
     }
 
-    val installUpdate: (String) -> Unit = { url ->
-        if (!useInAppUpdateInstaller) {
-            openUpdateUrl(url)
-        } else {
-            // Route the in-app download through WorkManager so the transfer
-            // survives the user leaving the screen or the app. The worker
-            // posts a progress notification and completes the install
-            // handoff when the APK is ready.
-            val versionForDownload = updateSheetVersion ?: latestVersion ?: BuildConfig.VERSION_NAME
-            UpdateDownloadScheduler.cancel(context)
-            UpdateDownloadScheduler.schedule(
-                context,
-                url,
-                versionForDownload,
-                updatesWifiOnly,
-            )
+    val startDownloadNow: (String, DownloadMethod) -> Unit = { url, method ->
+        val versionForDownload = updateSheetVersion ?: latestVersion ?: BuildConfig.VERSION_NAME
+        UpdateDownloadScheduler.cancel(context)
+        updateDownloadJob?.cancel()
+        updateDownloadJob = null
+        UpdateDownloadScheduler.schedule(context, url, versionForDownload, updatesWifiOnly)
+        if (method == DownloadMethod.BACKGROUND) {
             coroutineScope.launch {
                 snackbarHostState.showSnackbar(
                     context.getString(R.string.updates_download_in_background),
                 )
             }
-            updateSheetState.dismiss()
+        }
+        updateSheetState.dismiss()
+    }
+
+    val resolveAndDownload: (String, DownloadMethod) -> Unit = { fallbackUrl, method ->
+        val deviceArch = Updater.detectDeviceArchitecture()
+        val assets = updateSheetApkAssets
+        val deviceAsset = deviceArch?.let { arch -> assets.firstOrNull { it.architecture == arch } }
+        val universalAsset = assets.firstOrNull { it.architecture == "universal" }
+        if (deviceAsset != null && universalAsset != null) {
+            pendingDownloadMethod = method
+            showAbiPickerDialog = true
+        } else {
+            val url = deviceAsset?.url ?: universalAsset?.url ?: fallbackUrl
+            startDownloadNow(url, method)
+        }
+    }
+
+    val installUpdate: (String) -> Unit = { url ->
+        if (!useInAppUpdateInstaller) {
+            openUpdateUrl(url)
+        } else {
+            resolveAndDownload(url, DownloadMethod.NOW)
         }
     }
 
@@ -334,26 +351,7 @@ fun UpdateScreen(
                 Spacer(Modifier.height(8.dp))
                 OutlinedButton(
                     onClick = {
-                        val versionForDownload = updateSheetVersion ?: latestVersion
-                        if (versionForDownload != null) {
-                            // Cancel any in-app download before handing the
-                            // work to WorkManager. Otherwise both write to
-                            // the same APK path and corrupt the result.
-                            updateDownloadJob?.cancel()
-                            updateDownloadJob = null
-                            UpdateDownloadScheduler.schedule(
-                                context,
-                                downloadUrl,
-                                versionForDownload,
-                                updatesWifiOnly,
-                            )
-                            updateSheetState.dismiss()
-                            coroutineScope.launch {
-                                snackbarHostState.showSnackbar(
-                                    context.getString(R.string.updates_download_in_background),
-                                )
-                            }
-                        }
+                        resolveAndDownload(downloadUrl, DownloadMethod.BACKGROUND)
                     },
                     modifier = Modifier.fillMaxWidth(),
                     shapes = ButtonDefaults.shapes(),
@@ -372,6 +370,80 @@ fun UpdateScreen(
         }
 
         Spacer(Modifier.height(12.dp))
+    }
+
+    if (showAbiPickerDialog) {
+        val deviceArch = Updater.detectDeviceArchitecture()
+        val deviceAsset =
+            deviceArch?.let { arch ->
+                updateSheetApkAssets.firstOrNull { it.architecture == arch }
+            }
+        val universalAsset = updateSheetApkAssets.firstOrNull { it.architecture == "universal" }
+        val method = pendingDownloadMethod
+        AlertDialog(
+            onDismissRequest = {
+                showAbiPickerDialog = false
+                pendingDownloadMethod = null
+            },
+            title = { Text(stringResource(R.string.update_abi_picker_title)) },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                    if (deviceAsset != null) {
+                        Button(
+                            onClick = {
+                                showAbiPickerDialog = false
+                                if (method != null) startDownloadNow(deviceAsset.url, method)
+                                pendingDownloadMethod = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shapes = ButtonDefaults.shapes(),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.Start,
+                            ) {
+                                Text(stringResource(R.string.update_abi_best_device))
+                                Text(
+                                    text = "${deviceAsset.displayName} · ${formatApkSize(deviceAsset.sizeBytes)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                    if (universalAsset != null) {
+                        OutlinedButton(
+                            onClick = {
+                                showAbiPickerDialog = false
+                                if (method != null) startDownloadNow(universalAsset.url, method)
+                                pendingDownloadMethod = null
+                            },
+                            modifier = Modifier.fillMaxWidth(),
+                            shapes = ButtonDefaults.shapes(),
+                        ) {
+                            Column(
+                                modifier = Modifier.fillMaxWidth(),
+                                horizontalAlignment = Alignment.Start,
+                            ) {
+                                Text(stringResource(R.string.update_abi_universal))
+                                Text(
+                                    text = "${universalAsset.displayName} · ${formatApkSize(universalAsset.sizeBytes)}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                    }
+                }
+            },
+            confirmButton = {},
+            dismissButton = {
+                TextButton(onClick = {
+                    showAbiPickerDialog = false
+                    pendingDownloadMethod = null
+                }) {
+                    Text(stringResource(android.R.string.cancel))
+                }
+            },
+        )
     }
 
     val onCheckForUpdate: () -> Unit = {
@@ -399,6 +471,7 @@ fun UpdateScreen(
                             val version = Updater.getReleaseVersionName(release)
                             latestVersion = version
                             updateSheetNotes = release.body
+                            updateSheetApkAssets = release.apkAssets
                             updateSheetIsSameVersion = !Updater.isUpdateAvailable(version, BuildConfig.VERSION_NAME)
                             updateSheetVersion = version
 
@@ -1598,3 +1671,12 @@ private fun formatCommitDate(isoDate: String): String =
     } catch (e: Exception) {
         isoDate.take(10)
     }
+
+
+private enum class DownloadMethod { NOW, BACKGROUND }
+
+private fun formatApkSize(bytes: Long): String {
+    if (bytes <= 0L) return "size unknown"
+    val mb = bytes / (1024.0 * 1024.0)
+    return String.format(java.util.Locale.US, "%.1f MB", mb)
+}

@@ -1166,4 +1166,8 @@
     <string name="lyrics_caption_position_above">Above</string>
     <string name="lyrics_caption_position_below">Below</string>
     <string name="update_download_cancel">Cancel</string>
+    <string name="update_abi_picker_title">Choose the update build</string>
+    <string name="update_abi_best_device">Best for your device</string>
+    <string name="update_abi_universal">Universal (all devices)</string>
+    <string name="update_abi_size_unknown">size unknown</string>
 </resources>
