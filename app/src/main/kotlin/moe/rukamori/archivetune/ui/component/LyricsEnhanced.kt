@@ -118,6 +118,7 @@ import moe.rukamori.archivetune.lyrics.LyricsEntry
 import moe.rukamori.archivetune.lyrics.LyricsSourceFormat
 import moe.rukamori.archivetune.lyrics.LyricsSyncType
 import moe.rukamori.archivetune.lyrics.LyricsTextDirection
+import moe.rukamori.archivetune.lyrics.LyricsTextColorMode
 import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
 import moe.rukamori.archivetune.lyrics.WordTimestamp
