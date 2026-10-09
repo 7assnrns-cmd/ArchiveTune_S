@@ -509,7 +509,7 @@ fun UpdateScreen(
     val topBarSubtitle =
         when (updateChannel) {
             UpdateChannel.MY_VERSION -> stringResource(R.string.updates_subtitle_artifact)
-            UpdateChannel.OFFICIAL_VERSION -> channelTitle
+            UpdateChannel.OFFICIAL_VERSION -> stringResource(R.string.channel_official_version)
         }
 
     Scaffold(
@@ -904,7 +904,7 @@ private fun UpdateStatusPanel(
 ) {
     val channelLabel =
         when (updateChannel) {
-            UpdateChannel.OFFICIAL_VERSION -> channelTitle
+            UpdateChannel.OFFICIAL_VERSION -> stringResource(R.string.channel_official_version)
             UpdateChannel.MY_VERSION -> stringResource(R.string.channel_artifact)
         }
     val supportingText =
@@ -1181,7 +1181,7 @@ private fun UpdatePreferencesPanel(
                         shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
                         icon = {},
                     ) {
-                        Text(text = channelTitle)
+                        Text(text = stringResource(R.string.channel_official_version))
                     }
                     SegmentedButton(
                         selected = updateChannel == UpdateChannel.MY_VERSION,

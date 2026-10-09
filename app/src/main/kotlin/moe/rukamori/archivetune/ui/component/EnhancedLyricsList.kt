@@ -38,6 +38,7 @@ import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.blur
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
@@ -321,6 +322,7 @@ private fun SyllableText(
 ) {
     val isSyllablePast = isPast || currentPositionMs >= syllable.end
     val isSyllableActive = !isPast && currentPositionMs in syllable.start until syllable.end
+    val isStarted = isPast || currentPositionMs >= syllable.start
 
     val syllableColor = when {
         isSyllablePast || isSyllableActive -> {
@@ -331,7 +333,25 @@ private fun SyllableText(
         }
     }
 
-    Column(horizontalAlignment = Alignment.CenterHorizontally) {
+    // Rise-and-stay per syllable. Each syllable rises once its start time
+    // has passed and keeps that lift for the rest of the line, matching
+    // the behaviour of the previous library renderer. Past lines receive
+    // Int.MAX_VALUE (all syllables started), future lines Int.MIN_VALUE
+    // (none started), and the active line receives the live position so
+    // only it animates.
+    val targetRise = if (isStarted) -8f else 0f
+    val animatedRise by animateFloatAsState(
+        targetValue = targetRise,
+        animationSpec = tween(durationMillis = 120),
+        label = "enhancedSyllableRise",
+    )
+
+    Column(
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.graphicsLayer {
+            translationY = animatedRise * density
+        },
+    ) {
         val syllablePhonetic: String? = syllable.phonetic
         if (showPhonetic && !syllablePhonetic.isNullOrBlank()) {
             Text(
