@@ -125,10 +125,15 @@ object Updater {
      * name does not match or the suffix is not one we know about.
      */
     private fun extractArchFromApkName(name: String): String? {
-        val m = Regex("""app-[^-]+-[^-]+-(.+?)-release\.apk""", RegexOption.IGNORE_CASE)
-            .find(name) ?: return null
-        val raw = m.groupValues.getOrNull(1)?.lowercase() ?: return null
-        return raw.takeIf { it in setOf("universal", "arm64", "armeabi", "x86_64", "x86") }
+        // Matches both the legacy `app-<dist>-<device>-<arch>-release.apk`
+        // form and the current `ArchiveTune S v<ver> <arch>.apk` form.
+        // The anchor on `$` plus the left-to-right alternation order makes
+        // `x86_64` match before `x86` and `arm64` before `arm`.
+        val m = Regex(
+            """(arm64|armeabi|x86_64|x86|universal)(?:-release)?\.apk$""",
+            RegexOption.IGNORE_CASE,
+        ).find(name) ?: return null
+        return m.groupValues.getOrNull(1)?.lowercase()
     }
 
     private fun displayNameForArch(arch: String): String =
