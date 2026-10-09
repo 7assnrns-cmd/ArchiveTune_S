@@ -3498,13 +3498,25 @@ private data class PendingCrossfadeQueueSwap(
     private suspend fun awaitPrimaryCrossfadeHandoffReady(incomingPlayer: ExoPlayer): Boolean {
         val deadlineMs = android.os.SystemClock.elapsedRealtime() + CROSSFADE_HANDOFF_READY_TIMEOUT_MS
         while (kotlinx.coroutines.currentCoroutineContext().isActive && android.os.SystemClock.elapsedRealtime() < deadlineMs) {
-            if (player.playbackState == Player.STATE_READY && canHandoffWithoutRebuffer(incomingPlayer)) {
+            val state = player.playbackState
+            if (state == Player.STATE_READY && canHandoffWithoutRebuffer(incomingPlayer)) {
                 return true
             }
-            if (player.playbackState == Player.STATE_IDLE || player.playbackState == Player.STATE_ENDED) {
+            if (state == Player.STATE_IDLE) {
+                // seekTo(targetIndex, ...) can leave primary transiently
+                // IDLE for a few milliseconds before it switches to
+                // BUFFERING on the incoming item. Bailing on that IDLE
+                // (as the previous version did) aborted the crossfade
+                // within ~3ms of the seek — which is why manual crossfade
+                // failed most of the time even though the engine accepted
+                // the request. Kick the primary back into loading and keep
+                // waiting; the same pattern the secondary player already
+                // uses in awaitCrossfadePlayerReady.
+                player.prepare()
+            } else if (state == Player.STATE_ENDED) {
                 return false
             }
-            delay(25L)
+            delay(CROSSFADE_HANDOFF_POLL_MS)
         }
         return player.playbackState == Player.STATE_READY && canHandoffWithoutRebuffer(incomingPlayer)
     }
