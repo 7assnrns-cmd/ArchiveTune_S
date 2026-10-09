@@ -112,6 +112,7 @@ import moe.rukamori.archivetune.lyrics.LyricsUtils.findCurrentLineIndex
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
 import moe.rukamori.archivetune.lyrics.WordTimestamp
 import moe.rukamori.archivetune.lyrics.toLyricsEntries
+import moe.rukamori.archivetune.lyrics.LyricsVisibilityOverride
 import moe.rukamori.archivetune.ui.component.shimmer.ShimmerHost
 import moe.rukamori.archivetune.ui.component.shimmer.TextPlaceholder
 import moe.rukamori.archivetune.ui.theme.rememberArchiveTuneLyricsFontFamily
@@ -211,7 +212,22 @@ fun LyricsV2(
     var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showShareImageDialog by remember { mutableStateOf(false) }
 
-    val showTranslations = preparedLyrics?.lines?.any { line -> line.translation != null } == true
+    val translationOverride = preferences?.translationOverride ?: LyricsVisibilityOverride.AUTO
+    val phoneticOverride = preferences?.phoneticOverride ?: LyricsVisibilityOverride.AUTO
+    val showTranslations =
+        when (translationOverride) {
+            LyricsVisibilityOverride.AUTO ->
+                preparedLyrics?.lines?.any { line -> line.translation != null } == true
+            LyricsVisibilityOverride.ALWAYS_ON -> true
+            LyricsVisibilityOverride.ALWAYS_OFF -> false
+        }
+    val showPhonetics =
+        when (phoneticOverride) {
+            LyricsVisibilityOverride.AUTO ->
+                preparedLyrics?.lines?.any { line -> line.romanizedText != null || line.phonetics.isNotEmpty() } == true
+            LyricsVisibilityOverride.ALWAYS_ON -> true
+            LyricsVisibilityOverride.ALWAYS_OFF -> false
+        }
     val isSynced = preparedLyrics?.syncType != null && preparedLyrics.syncType != LyricsSyncType.PLAIN
     val isWordSyncedFormat = preparedLyrics?.syncType == LyricsSyncType.WORD
 

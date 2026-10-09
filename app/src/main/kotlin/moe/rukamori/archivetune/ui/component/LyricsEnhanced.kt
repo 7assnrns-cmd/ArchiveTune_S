@@ -119,6 +119,7 @@ import moe.rukamori.archivetune.lyrics.LyricsSourceFormat
 import moe.rukamori.archivetune.lyrics.LyricsSyncType
 import moe.rukamori.archivetune.lyrics.LyricsTextDirection
 import moe.rukamori.archivetune.lyrics.LyricsTextColorMode
+import moe.rukamori.archivetune.lyrics.LyricsVisibilityOverride
 import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
 import moe.rukamori.archivetune.lyrics.WordTimestamp
@@ -202,10 +203,24 @@ fun LyricsEnhanced(
     var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showShareImageDialog by remember { mutableStateOf(false) }
 
-    val showTranslations =
+    val translationOverride = preferences?.translationOverride ?: LyricsVisibilityOverride.AUTO
+    val phoneticOverride = preferences?.phoneticOverride ?: LyricsVisibilityOverride.AUTO
+    val hasTranslationData =
         preparedLyrics?.lines?.any { line -> line.translation != null } == true
-    val showPhonetics =
+    val hasPhoneticData =
         preparedLyrics?.lines?.any { line -> line.romanizedText != null || line.phonetics.isNotEmpty() } == true
+    val showTranslations =
+        when (translationOverride) {
+            LyricsVisibilityOverride.AUTO -> hasTranslationData
+            LyricsVisibilityOverride.ALWAYS_ON -> true
+            LyricsVisibilityOverride.ALWAYS_OFF -> false
+        }
+    val showPhonetics =
+        when (phoneticOverride) {
+            LyricsVisibilityOverride.AUTO -> hasPhoneticData
+            LyricsVisibilityOverride.ALWAYS_ON -> true
+            LyricsVisibilityOverride.ALWAYS_OFF -> false
+        }
     val baseLayoutDirection = LocalLayoutDirection.current
     val lyricsLayoutDirection =
         remember(preparedLyrics?.lines, baseLayoutDirection) {
