@@ -26,6 +26,9 @@ object UpdateApkStorage {
 
     fun apkFile(context: Context): File = File(directory(context), ApkFileName)
 
+    /** Temporary path used while a download is in flight. */
+    fun tmpFile(context: Context): File = File(directory(context), "archivetune-update.download")
+
     fun hasPendingApk(context: Context): Boolean = apkFile(context).let { it.isFile && it.length() > 0L }
 
     fun deletePendingApk(context: Context) {

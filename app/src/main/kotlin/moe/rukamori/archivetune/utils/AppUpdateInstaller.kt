@@ -92,10 +92,14 @@ object AppUpdateInstaller {
         }
 
         UpdateApkStorage.clearLegacyCache(context)
-        val updateDir = UpdateApkStorage.directory(context)
         val targetApk = UpdateApkStorage.apkFile(context)
+        // Write to a temporary path first. Only rename it to the final
+        // apkFile once the download is complete, so a partially-written
+        // file can never be picked up by installDownloaded and offered to
+        // the package installer.
+        val downloadedFile = UpdateApkStorage.tmpFile(context)
+        downloadedFile.takeIf { it.exists() }?.delete()
         targetApk.takeIf { it.exists() }?.delete()
-        val downloadedFile = File(updateDir, DownloadFileName)
 
         client.prepareGet(url).execute { response ->
             val responseCode = response.status.value
@@ -127,19 +131,23 @@ object AppUpdateInstaller {
 
         val resultFile =
             if (url.lowercase(Locale.US).substringBefore('?').endsWith(".apk")) {
-                downloadedFile.renameAsApk()
+                downloadedFile
             } else {
                 extractGmsApk(downloadedFile, targetApk)
                     ?: if (downloadedFile.containsApkManifest()) {
-                        downloadedFile.renameAsApk()
+                        downloadedFile
                     } else {
                         throw IOException("No GMS APK found in update artifact")
                     }
             }
-        // Ensure the final file lives at UpdateApkStorage.apkFile(context)
+        // Finalise: move the completed file to UpdateApkStorage.apkFile().
+        // renameTo is atomic within the same filesystem; fall back to copy
+        // if the rename is refused (rare, but possible on some OEM FS).
         if (resultFile != targetApk) {
-            resultFile.copyTo(targetApk, overwrite = true)
-            resultFile.delete()
+            if (!resultFile.renameTo(targetApk)) {
+                resultFile.copyTo(targetApk, overwrite = true)
+                resultFile.delete()
+            }
         }
         return targetApk
     }
@@ -247,6 +255,10 @@ object AppUpdateInstaller {
             val apk = UpdateApkStorage.apkFile(context.applicationContext)
             if (!apk.isFile || apk.length() == 0L) {
                 Result.failure(IOException("No downloaded APK"))
+            } else if (apk.length() < MIN_APK_SIZE_BYTES) {
+                // A partially-downloaded APK would fail signature
+                // verification at install time. Reject it early.
+                Result.failure(IOException("Downloaded APK looks truncated (${apk.length()} bytes)"))
             } else {
                 withContext(Dispatchers.Main) { installApk(context, apk) }
                 Result.success(Unit)
@@ -263,4 +275,5 @@ object AppUpdateInstaller {
     private const val ApkMimeType = "application/vnd.android.package-archive"
     private const val STREAM_BUFFER_SIZE = 256 * 1024
     private const val PROGRESS_UPDATE_INTERVAL_MS = 200L
+    private const val MIN_APK_SIZE_BYTES = 1_000_000L
 }

@@ -44,6 +44,17 @@ class UpdateDownloadNotifier(private val context: Context) {
 
     fun showProgress(fraction: Float?) {
         val percent = ((fraction ?: 0f).coerceIn(0f, 1f) * 100).toInt()
+        val cancelIntent =
+            Intent(context, UpdateDownloadCancelReceiver::class.java).apply {
+                action = UpdateDownloadCancelReceiver.ACTION_CANCEL
+            }
+        val cancelPendingIntent =
+            PendingIntent.getBroadcast(
+                context,
+                3,
+                cancelIntent,
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
         val n =
             NotificationCompat
                 .Builder(context, CHANNEL_ID)
@@ -54,7 +65,11 @@ class UpdateDownloadNotifier(private val context: Context) {
                 .setOngoing(true)
                 .setOnlyAlertOnce(true)
                 .setProgress(100, percent, fraction == null)
-                .build()
+                .addAction(
+                    android.R.drawable.ic_menu_close_clear_cancel,
+                    context.getString(R.string.update_download_cancel),
+                    cancelPendingIntent,
+                ).build()
         notify(n)
     }
 

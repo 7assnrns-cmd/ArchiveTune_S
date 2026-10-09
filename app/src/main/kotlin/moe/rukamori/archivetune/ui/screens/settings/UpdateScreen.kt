@@ -240,6 +240,11 @@ fun UpdateScreen(
         if (!useInAppUpdateInstaller) {
             openUpdateUrl(url)
         } else if (updateDownloadJob?.isActive != true) {
+            // A background worker may be writing the same APK. Cancel it
+            // before starting an in-app download, otherwise both flows
+            // write to the same file and the resulting APK fails signature
+            // verification at install time.
+            UpdateDownloadScheduler.cancel(context)
             updateDownloadProgress = null
             updateSheetError = null
             showUpdateErrorDialog = false
@@ -338,6 +343,11 @@ fun UpdateScreen(
                     onClick = {
                         val versionForDownload = updateSheetVersion ?: latestVersion
                         if (versionForDownload != null) {
+                            // Cancel any in-app download before handing the
+                            // work to WorkManager. Otherwise both write to
+                            // the same APK path and corrupt the result.
+                            updateDownloadJob?.cancel()
+                            updateDownloadJob = null
                             UpdateDownloadScheduler.schedule(
                                 context,
                                 downloadUrl,

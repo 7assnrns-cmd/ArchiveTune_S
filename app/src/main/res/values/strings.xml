@@ -1165,4 +1165,5 @@
     <string name="lyrics_phonetic_position_title">Phonetic position</string>
     <string name="lyrics_caption_position_above">Above</string>
     <string name="lyrics_caption_position_below">Below</string>
+    <string name="update_download_cancel">Cancel</string>
 </resources>

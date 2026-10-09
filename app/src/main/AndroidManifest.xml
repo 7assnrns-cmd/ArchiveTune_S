@@ -207,6 +207,11 @@
             </intent-filter>
         </activity>
 
+        <receiver
+            android:name=".updates.UpdateDownloadCancelReceiver"
+            android:enabled="true"
+            android:exported="false" />
+
         <provider
             android:name="androidx.core.content.FileProvider"
             android:authorities="${applicationId}.FileProvider"
