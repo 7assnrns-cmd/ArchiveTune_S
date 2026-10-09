@@ -37,6 +37,7 @@ class UpdateCheckScheduler
 
         companion object {
             private const val WORK_NAME = "update_check_work"
+        private const val IMMEDIATE_WORK_NAME = "update_check_immediate"
 
             fun schedule(context: Context) {
                 if (!BuildConfig.UPDATER_AVAILABLE) {

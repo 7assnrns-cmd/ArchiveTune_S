@@ -27,6 +27,8 @@ class UpdateCheckWorker(
     context: Context,
     params: WorkerParameters,
 ) : CoroutineWorker(context, params) {
+    private val CHECK_INTERVAL_MS = 6 * 60 * 60 * 1000L
+
     override suspend fun doWork(): Result {
         if (!BuildConfig.UPDATER_AVAILABLE) {
             return Result.success()
