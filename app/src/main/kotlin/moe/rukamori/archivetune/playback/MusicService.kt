@@ -2717,7 +2717,13 @@ private data class PendingCrossfadeQueueSwap(
             crossfadeIncomingBaseVolume = player.volume
             crossfadePlaybackRequested = true
             crossfadeThemeTarget.value = targetItem.metadata
-            localPlayer.pauseAtEndOfMediaItems = false
+            // Manual path must also stop the outgoing track at end-of-media
+            // while the secondary finishes loading. Otherwise ExoPlayer
+            // auto-advances to the next item in the timeline and the
+            // primary no longer matches the requested targetIndex — which
+            // makes awaitPrimaryPositionAdvance bail out at the very first
+            // poll (the log showed ~11 ms).
+            localPlayer.pauseAtEndOfMediaItems = true
 
             var swapped = false
             try {
@@ -2834,6 +2840,14 @@ private data class PendingCrossfadeQueueSwap(
                 crossfadeProgress = 0f
                 crossfadePlaybackRequested = false
                 crossfadeThemeTarget.value = null
+                // Restore auto-advance now that the crossfade is over. The
+                // outgoing track has either been replaced by the incoming
+                // one or ended naturally; leaving pauseAtEndOfMediaItems
+                // true would keep the player from advancing on the next
+                // natural track end.
+                if (::player.isInitialized) {
+                    localPlayer.pauseAtEndOfMediaItems = false
+                }
                 releaseSecondaryCrossfadePlayer()
                 pendingCrossfadeQueueSwap?.let { swap ->
                         pendingCrossfadeQueueSwap = null
