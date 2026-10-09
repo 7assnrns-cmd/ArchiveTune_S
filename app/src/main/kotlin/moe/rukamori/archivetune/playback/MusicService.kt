@@ -9281,8 +9281,8 @@ private data class PendingCrossfadeQueueSwap(
         const val CROSSFADE_END_GUARD_MS = 150L
         const val CROSSFADE_PREPARE_AHEAD_MS = 30_000L
         const val CROSSFADE_READY_TIMEOUT_MS = 5_000L
-        const val CROSSFADE_HANDOFF_READY_TIMEOUT_MS = 5_000L
-        const val CROSSFADE_HANDOFF_BUFFER_MS = 5_000L
+        const val CROSSFADE_HANDOFF_READY_TIMEOUT_MS = 12_000L
+        const val CROSSFADE_HANDOFF_BUFFER_MS = 2_000L
         const val CROSSFADE_HANDOFF_SEEK_GUARD_MS = 750L
         const val CROSSFADE_HANDOFF_MAX_DRIFT_MS = 250L
         const val CROSSFADE_HANDOFF_DURATION_MS = 500L
