@@ -341,11 +341,11 @@ fun UpdateScreen(
                                 updatesWifiOnly,
                             )
                             coroutineScope.launch {
+                                updateSheetState.hide()
                                 snackbarHostState.showSnackbar(
                                     context.getString(R.string.updates_download_in_background),
                                 )
                             }
-                            updateSheetState.hide()
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
