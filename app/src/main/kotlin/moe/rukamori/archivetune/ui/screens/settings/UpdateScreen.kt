@@ -340,8 +340,8 @@ fun UpdateScreen(
                                 versionForDownload,
                                 updatesWifiOnly,
                             )
+                            updateSheetState.dismiss()
                             coroutineScope.launch {
-                                updateSheetState.hide()
                                 snackbarHostState.showSnackbar(
                                     context.getString(R.string.updates_download_in_background),
                                 )
