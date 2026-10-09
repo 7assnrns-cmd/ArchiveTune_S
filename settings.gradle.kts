@@ -34,6 +34,7 @@ dependencyResolutionManagement {
             filter {
                 includeGroup("com.github.therealbush")
                 includeGroup("com.github.TeamNewPipe")
+                includeGroup("com.github.7assnrns-cmd.accompanist-lyrics-ui")
             }
         }
     }
