@@ -39,7 +39,7 @@ class UpdateCheckWorker(
 
             val latestVersion =
                 when (updateChannel) {
-                    UpdateChannel.MY_VERSION -> Updater.getLatestCanaryVersionName()
+                    UpdateChannel.MY_VERSION -> Updater.getLatestVersionName()
                     UpdateChannel.OFFICIAL_VERSION -> Updater.getLatestVersionName()
                 }.getOrElse { throw it }
 

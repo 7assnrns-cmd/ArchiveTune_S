@@ -344,7 +344,7 @@ fun UpdateScreen(
                                 showUpdateUpToDateDialog = true
                                 onUpToDate()
                             } else if (updateChannel == UpdateChannel.MY_VERSION) {
-                                val downloadUrl = Updater.getLatestCanaryDownloadUrl()
+                                val downloadUrl = Updater.getLatestDownloadUrl()
                                 installUpdate(downloadUrl)
                             } else {
                                 updateSheetState.show(updateSheetContent)
