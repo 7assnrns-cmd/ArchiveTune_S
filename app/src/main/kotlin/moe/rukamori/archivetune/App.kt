@@ -34,6 +34,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import moe.rukamori.archivetune.updates.UpdateCheckScheduler
 import moe.rukamori.archivetune.canvas.StartCanvasPolicyUseCase
 import moe.rukamori.archivetune.constants.*
 import moe.rukamori.archivetune.downloads.DownloadedArtworkRepository
@@ -132,6 +133,9 @@ class App :
         initializeGatekeeper()
         initializeCriticalSync()
         initializeDeferredAsync()
+        // Kick off an update check on launch. The worker rate-limits itself
+        // with LastUpdateCheckKey, so this is safe to call on every start.
+        UpdateCheckScheduler.scheduleImmediate(this)
     }
 
     private fun initializeGatekeeper() {

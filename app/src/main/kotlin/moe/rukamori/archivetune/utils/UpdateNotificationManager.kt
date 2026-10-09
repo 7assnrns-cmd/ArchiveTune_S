@@ -82,7 +82,7 @@ object UpdateNotificationManager {
 
                 schedulePeriodicUpdateCheck(context)
 
-                val notificationsEnabled = preferences[EnableUpdateNotificationKey] ?: false
+                val notificationsEnabled = preferences[EnableUpdateNotificationKey] ?: true
                 if (!notificationsEnabled) return@withContext
 
                 val updateChannel =
@@ -123,7 +123,9 @@ object UpdateNotificationManager {
             val dataStore = context.dataStore
             val preferences = dataStore.data.first()
             val automaticChecksEnabled = preferences[AutomaticUpdateCheckKey] ?: true
-            if (!automaticChecksEnabled || preferences[EnableUpdateNotificationKey] != true) return
+            if (!automaticChecksEnabled) return
+            val notificationsEnabled = preferences[EnableUpdateNotificationKey] ?: true
+            if (!notificationsEnabled) return
             val lastNotified = preferences[LastNotifiedVersionKey].orEmpty()
 
             if (latestVersion != lastNotified && Updater.isUpdateAvailable(latestVersion, BuildConfig.VERSION_NAME)) {

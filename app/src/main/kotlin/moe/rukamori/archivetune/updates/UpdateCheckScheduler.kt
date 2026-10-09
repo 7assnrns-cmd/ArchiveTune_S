@@ -8,6 +8,7 @@
 package moe.rukamori.archivetune.updates
 
 import android.content.Context
+import androidx.work.OneTimeWorkRequestBuilder
 import androidx.work.Constraints
 import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
@@ -65,7 +66,29 @@ class UpdateCheckScheduler
                 )
             }
 
-            fun cancel(context: Context) {
+            /**
+         * Enqueue a one-shot check that runs immediately, subject to the
+         * rate limit in UpdateCheckWorker. Safe to call on every launch.
+         */
+        fun scheduleImmediate(context: Context) {
+            if (!BuildConfig.UPDATER_AVAILABLE) return
+            val constraints =
+                Constraints
+                    .Builder()
+                    .setRequiredNetworkType(NetworkType.CONNECTED)
+                    .build()
+            val request =
+                OneTimeWorkRequestBuilder<UpdateCheckWorker>()
+                    .setConstraints(constraints)
+                    .build()
+            WorkManager.getInstance(context).enqueueUniqueWork(
+                IMMEDIATE_WORK_NAME,
+                androidx.work.ExistingWorkPolicy.KEEP,
+                request,
+            )
+        }
+
+        fun cancel(context: Context) {
                 WorkManager.getInstance(context).cancelUniqueWork(WORK_NAME)
             }
         }

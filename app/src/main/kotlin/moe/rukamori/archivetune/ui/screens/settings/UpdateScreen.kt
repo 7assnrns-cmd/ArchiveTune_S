@@ -239,32 +239,25 @@ fun UpdateScreen(
     val installUpdate: (String) -> Unit = { url ->
         if (!useInAppUpdateInstaller) {
             openUpdateUrl(url)
-        } else if (updateDownloadJob?.isActive != true) {
-            // A background worker may be writing the same APK. Cancel it
-            // before starting an in-app download, otherwise both flows
-            // write to the same file and the resulting APK fails signature
-            // verification at install time.
+        } else {
+            // Route the in-app download through WorkManager so the transfer
+            // survives the user leaving the screen or the app. The worker
+            // posts a progress notification and completes the install
+            // handoff when the APK is ready.
+            val versionForDownload = updateSheetVersion ?: latestVersion ?: BuildConfig.VERSION_NAME
             UpdateDownloadScheduler.cancel(context)
-            updateDownloadProgress = null
-            updateSheetError = null
-            showUpdateErrorDialog = false
-            showUpdateDownloadDialog = true
-            updateDownloadJob =
-                coroutineScope.launch {
-                    AppUpdateInstaller
-                        .downloadAndInstall(context, url) { progress ->
-                            updateDownloadProgress = progress.fraction
-                        }.onSuccess {
-                            showUpdateDownloadDialog = false
-                            snackbarHostState.showSnackbar(
-                                context.getString(R.string.download_complete),
-                            )
-                        }.onFailure { error ->
-                            showUpdateDownloadDialog = false
-                            updateSheetError = error.message ?: context.getString(R.string.error_unknown)
-                            showUpdateErrorDialog = true
-                        }
-                }
+            UpdateDownloadScheduler.schedule(
+                context,
+                url,
+                versionForDownload,
+                updatesWifiOnly,
+            )
+            coroutineScope.launch {
+                snackbarHostState.showSnackbar(
+                    context.getString(R.string.updates_download_in_background),
+                )
+            }
+            updateSheetState.dismiss()
         }
     }
 

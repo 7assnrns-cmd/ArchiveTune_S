@@ -8,6 +8,7 @@
 package moe.rukamori.archivetune.utils
 
 import android.content.Context
+import androidx.datastore.preferences.core.edit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
@@ -15,6 +16,7 @@ import kotlinx.coroutines.flow.first
 import moe.rukamori.archivetune.BuildConfig
 import moe.rukamori.archivetune.constants.AutoDownloadUpdatesKey
 import moe.rukamori.archivetune.constants.AutomaticUpdateCheckKey
+import moe.rukamori.archivetune.constants.LastUpdateCheckKey
 import moe.rukamori.archivetune.constants.UpdatesWifiOnlyKey
 import moe.rukamori.archivetune.updates.UpdateDownloadScheduler
 import moe.rukamori.archivetune.constants.UpdateChannel
@@ -36,6 +38,14 @@ class UpdateCheckWorker(
             val preferences = dataStore.data.first()
             val automaticChecksEnabled = preferences[AutomaticUpdateCheckKey] ?: true
             if (!automaticChecksEnabled) return Result.success()
+
+            // Rate limit: skip if we ran within the last 6 hours. The
+            // immediate worker (scheduleImmediate) can fire on every launch,
+            // so this check keeps that cheap.
+            val lastCheck = preferences[LastUpdateCheckKey] ?: 0L
+            val now = System.currentTimeMillis()
+            if (now - lastCheck < CHECK_INTERVAL_MS) return Result.success()
+            dataStore.edit { it[LastUpdateCheckKey] = now }
 
             val updateChannel =
                 UpdateChannel.fromStoredName(preferences[UpdateChannelKey], defaultUpdateChannel)
