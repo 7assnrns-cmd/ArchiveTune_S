@@ -162,8 +162,13 @@ jobs:
           echo "Keystore decoded:"
           ls -la app/keystore/
 
-      - name: Build Release APK
-        run: ./gradlew assembleGmsMobileUniversalRelease
+      - name: Build Release APKs
+        run: |
+          ./gradlew \
+            assembleGmsMobileUniversalRelease \
+            assembleGmsMobileArm64Release \
+            assembleGmsMobileArmeabiRelease \
+            assembleGmsMobileX86_64Release
         env:
           PULL_REQUEST: 'false'
           GITHUB_EVENT_NAME: ${{ github.event_name }}
@@ -178,32 +183,48 @@ jobs:
           KEY_ALIAS: ${{ secrets.KEY_ALIAS }}
           KEY_PASSWORD: ${{ secrets.KEY_PASSWORD }}
 
-      - name: Resolve release output directory
+      - name: Collect release APKs
         id: release_dir
         shell: bash
         run: |
           set -euo pipefail
-          CANDIDATES=(
-            "app/build/outputs/apk/gmsMobileUniversal/release"
-            "app/build/outputs/apk/gms/mobile/universal/release"
-            "app/build/outputs/apk/mobile/universal/release"
-            "app/build/outputs/apk/mobileUniversal/release"
-          )
-          for d in "${CANDIDATES[@]}"; do
-            if [ -d "$d" ]; then
-              echo "release_dir=$d" >> "$GITHUB_OUTPUT"
-              exit 0
+          OUT="app/build/outputs/release_apks"
+          rm -rf "$OUT"
+          mkdir -p "$OUT"
+
+          found=0
+          for abi in universal arm64 armeabi x86_64; do
+            dir="app/build/outputs/apk/gms/mobile/${abi}/release"
+            if [ -d "$dir" ]; then
+              for apk in "$dir"/*.apk; do
+                [ -f "$apk" ] || continue
+                cp "$apk" "$OUT/"
+                found=$((found+1))
+                echo "  + $(basename "$apk")"
+              done
             fi
           done
-          # fallback: any release dir
-          FOUND="$(find app/build/outputs/apk -type f -name "*.apk" -path "*universal*release*" | head -n 1 || true)"
-          if [ -n "$FOUND" ]; then
-            echo "release_dir=$(dirname "$FOUND")" >> "$GITHUB_OUTPUT"
-            exit 0
+
+          # Fallback: any signed release APK under gms/mobile if a flavor
+          # name was renamed upstream.
+          if [ "$found" -eq 0 ]; then
+            while IFS= read -r apk; do
+              cp "$apk" "$OUT/"
+              found=$((found+1))
+              echo "  (fallback) + $(basename "$apk")"
+            done < <(find app/build/outputs/apk/gms/mobile -type f -name "*-release.apk" 2>/dev/null || true)
           fi
-          echo "Could not resolve release output dir"
-          find app/build/outputs/apk -maxdepth 6 -type d -print || true
-          exit 1
+
+          if [ "$found" -eq 0 ]; then
+            echo "::error::No release APKs found under app/build/outputs/apk/gms/mobile"
+            find app/build/outputs/apk -maxdepth 6 -type d -print || true
+            exit 1
+          fi
+
+          echo "Collected ${found} APK(s):"
+          ls -lh "$OUT"
+          echo "release_dir=$OUT" >> "$GITHUB_OUTPUT"
+          echo "apk_count=${found}" >> "$GITHUB_OUTPUT" 
 
       - name: Upload Release APK (unsigned)
         uses: actions/upload-artifact@v7
