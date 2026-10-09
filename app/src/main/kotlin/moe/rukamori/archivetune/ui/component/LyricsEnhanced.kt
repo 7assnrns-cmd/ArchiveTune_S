@@ -82,6 +82,7 @@ import androidx.compose.ui.res.pluralStringResource
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.dp
@@ -103,10 +104,21 @@ import moe.rukamori.archivetune.LocalPlayerConnection
 import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyle
 import moe.rukamori.archivetune.constants.PlayerBackgroundStyleKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedAccompanimentScaleKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedPhoneticScaleKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedLineSpacingKey
+import moe.rukamori.archivetune.constants.LyricsEnhancedFontWeightKey
+import moe.rukamori.archivetune.constants.LyricsViewportOffsetFractionKey
+import moe.rukamori.archivetune.constants.LyricsKeepAliveZoneDpKey
+import moe.rukamori.archivetune.constants.LyricsSelectionLimitKey
+import moe.rukamori.archivetune.constants.LyricsTranslationScaleKey
+import moe.rukamori.archivetune.constants.LyricsTranslationLineHeightScaleKey
+import moe.rukamori.archivetune.constants.LyricsTranslationItalicKey
 import moe.rukamori.archivetune.lyrics.LyricsEntry
 import moe.rukamori.archivetune.lyrics.LyricsSourceFormat
 import moe.rukamori.archivetune.lyrics.LyricsSyncType
 import moe.rukamori.archivetune.lyrics.LyricsTextDirection
+import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
 import moe.rukamori.archivetune.lyrics.LyricsUtils.providedTranslationTextForEntry
 import moe.rukamori.archivetune.lyrics.WordTimestamp
 import moe.rukamori.archivetune.lyrics.toLyricsEntries
@@ -114,6 +126,7 @@ import moe.rukamori.archivetune.ui.component.shimmer.ShimmerHost
 import moe.rukamori.archivetune.ui.component.shimmer.TextPlaceholder
 import moe.rukamori.archivetune.ui.theme.rememberArchiveTuneLyricsFontFamily
 import moe.rukamori.archivetune.utils.rememberEnumPreference
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.viewmodels.LyricsRenderScreenState
 import kotlin.math.roundToInt
 import kotlin.math.roundToLong
@@ -152,6 +165,17 @@ fun LyricsEnhanced(
     val lyricsFontFamily = rememberArchiveTuneLyricsFontFamily()
 
     val playerBackground by rememberEnumPreference(PlayerBackgroundStyleKey, PlayerBackgroundStyle.DEFAULT)
+
+    val accompanimentScale by rememberPreference(LyricsEnhancedAccompanimentScaleKey, defaultValue = 0.82f)
+    val phoneticScale by rememberPreference(LyricsEnhancedPhoneticScaleKey, defaultValue = 0.55f)
+    val enhancedLineSpacing by rememberPreference(LyricsEnhancedLineSpacingKey, defaultValue = 1.3f)
+    val enhancedFontWeight by rememberEnumPreference(LyricsEnhancedFontWeightKey, defaultValue = LyricsEnhancedFontWeight.BOLD)
+    val viewportOffset by rememberPreference(LyricsViewportOffsetFractionKey, defaultValue = 0.38f)
+    val keepAliveZoneDp by rememberPreference(LyricsKeepAliveZoneDpKey, defaultValue = 72)
+    val selectionLimit by rememberPreference(LyricsSelectionLimitKey, defaultValue = 5)
+    val translationScale by rememberPreference(LyricsTranslationScaleKey, defaultValue = 0.55f)
+    val translationLineHeight by rememberPreference(LyricsTranslationLineHeightScaleKey, defaultValue = 0.75f)
+    val translationItalic by rememberPreference(LyricsTranslationItalicKey, defaultValue = false)
     val textColor =
         textColorOverride ?: if (playerBackground == PlayerBackgroundStyle.DEFAULT) {
             MaterialTheme.colorScheme.onBackground
@@ -163,7 +187,7 @@ fun LyricsEnhanced(
     var isSelectionModeActive by rememberSaveable { mutableStateOf(false) }
     val selectedLineKeys = remember { mutableStateListOf<String>() }
     var showMaxSelectionToast by remember { mutableStateOf(false) }
-    val maxSelectionLimit = 5
+    val maxSelectionLimit = selectionLimit
     var showShareDialog by remember { mutableStateOf(false) }
     var shareDialogData by remember { mutableStateOf<Triple<String, String, String>?>(null) }
     var showShareImageDialog by remember { mutableStateOf(false) }
@@ -329,21 +353,37 @@ fun LyricsEnhanced(
         }
     }
 
+    val resolvedFontWeight =
+        when (enhancedFontWeight) {
+            LyricsEnhancedFontWeight.SEMI_BOLD -> FontWeight.SemiBold
+            LyricsEnhancedFontWeight.BOLD -> FontWeight.Bold
+            LyricsEnhancedFontWeight.EXTRA_BOLD -> FontWeight.ExtraBold
+        }
     val normalTextStyle =
         MaterialTheme.typography.headlineMedium.copy(
             fontSize = lyricsTextSize.sp,
-            fontWeight = FontWeight.Bold,
+            lineHeight = (lyricsTextSize * enhancedLineSpacing).sp,
+            fontWeight = resolvedFontWeight,
             fontFamily = lyricsFontFamily ?: MaterialTheme.typography.headlineMedium.fontFamily,
         )
     val accompanimentTextStyle =
         MaterialTheme.typography.titleLarge.copy(
-            fontSize = (lyricsTextSize * 0.82f).sp,
+            fontSize = (lyricsTextSize * accompanimentScale).sp,
+            lineHeight = (lyricsTextSize * accompanimentScale * enhancedLineSpacing).sp,
+            fontWeight = resolvedFontWeight,
             fontFamily = lyricsFontFamily ?: MaterialTheme.typography.titleLarge.fontFamily,
         )
     val phoneticTextStyle =
         MaterialTheme.typography.bodyMedium.copy(
-            fontSize = (lyricsTextSize * 0.55f).sp,
+            fontSize = (lyricsTextSize * phoneticScale).sp,
             fontWeight = FontWeight.Normal,
+        )
+    val translationTextStyle =
+        MaterialTheme.typography.bodyMedium.copy(
+            fontSize = (lyricsTextSize * translationScale).sp,
+            lineHeight = (lyricsTextSize * translationScale * translationLineHeight).sp,
+            fontWeight = FontWeight.Normal,
+            fontStyle = if (translationItalic) FontStyle.Italic else FontStyle.Normal,
         )
     val plainLyrics =
         remember(lyricsEntries, isSynced) {
@@ -545,17 +585,15 @@ fun LyricsEnhanced(
                                 },
                                 textColor = textColor,
                                 normalLineTextStyle = normalTextStyle,
+                                translationTextStyle = translationTextStyle,
                                 accompanimentLineTextStyle = accompanimentTextStyle,
                                 phoneticTextStyle = phoneticTextStyle,
                                 blendMode = BlendMode.SrcOver,
                                 useBlurEffect = lyricsLineBlur,
                                 showTranslation = showTranslations,
                                 showPhonetic = showPhonetics,
-                                // 0.38 matches the previous pixel-based offset
-                                // (maxHeight * 0.38f), now expressed as a fraction
-                                // of the viewport height.
-                                anchor = LyricsAnchor.Fraction(0.38f),
-                                keepAliveZone = 72.dp,
+                                anchor = LyricsAnchor.Fraction(viewportOffset),
+                                keepAliveZone = keepAliveZoneDp.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
                         
