@@ -256,27 +256,10 @@ jobs:
             exit 0
           fi
 
-          NOTES="## ArchiveTune S ${TAG}
-
-          Auto-draft from commit [\${{ github.sha }}](https://github.com/\${{ github.repository }}/commit/\${{ github.sha }}).
-
-          **Package id:** \`moe.rukamori.archivetune.s\` — installs alongside the official ArchiveTune.
-
-          **Upstream:** [rukamori/ArchiveTune](https://github.com/rukamori/ArchiveTune). This is an unofficial fork; no support offered.
-
-          ### Changes in this release
-
-          - Reworked manual crossfade handoff (no audible gap)
-          - Lyrics performance improvements (V2 and Enhanced)
-          - Letter-by-letter animation mode
-          - Custom lyrics text colour with contrast guard
-          - Real-time FPS overlay (Developer options)
-          - Signed release builds"
-
           gh release create "$TAG" \
             --repo "${{ github.repository }}" \
             --title "ArchiveTune S ${TAG}" \
-            --notes "$NOTES" \
+            --generate-notes \
             --draft \
             "${APKS[@]}"
 

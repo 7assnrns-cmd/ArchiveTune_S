@@ -168,7 +168,6 @@ fun UpdateScreen(
     var isLoadingCommits by remember { mutableStateOf(true) }
     var latestVersion by remember { mutableStateOf<String?>(null) }
     var isExpanded by rememberSaveable { mutableStateOf(true) }
-    var showArtifactChannelConfirmDialog by rememberSaveable { mutableStateOf(false) }
     var showEnableUpdateNotificationConfirmDialog by rememberSaveable { mutableStateOf(false) }
     var hasNotificationPermission by remember {
         mutableStateOf(
@@ -446,33 +445,6 @@ fun UpdateScreen(
         )
     }
 
-    if (showArtifactChannelConfirmDialog) {
-        AlertDialog(
-            onDismissRequest = { showArtifactChannelConfirmDialog = false },
-            title = { Text(stringResource(R.string.channel_artifact)) },
-            text = {
-                Text(
-                    text = stringResource(R.string.updates_artifact_channel_confirmation),
-                    style = MaterialTheme.typography.bodyMedium,
-                )
-            },
-            confirmButton = {
-                TextButton(
-                    onClick = {
-                        showArtifactChannelConfirmDialog = false
-                        onUpdateChannelChange(UpdateChannel.MY_VERSION)
-                    },
-                ) {
-                    Text(stringResource(android.R.string.ok))
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { showArtifactChannelConfirmDialog = false }) {
-                    Text(stringResource(android.R.string.cancel))
-                }
-            },
-        )
-    }
 
     LaunchedEffect(updateChannel) {
         if (!BuildConfig.UPDATER_AVAILABLE) {
@@ -601,11 +573,7 @@ fun UpdateScreen(
                         onUpdateSettingsAction(UpdateSettingsAction.SetAutomaticChecksEnabled(enabled))
                     },
                     onStableSelected = { onUpdateChannelChange(UpdateChannel.OFFICIAL_VERSION) },
-                    onArtifactSelected = {
-                        if (updateChannel != UpdateChannel.MY_VERSION) {
-                            showArtifactChannelConfirmDialog = true
-                        }
-                    },
+                    onArtifactSelected = { onUpdateChannelChange(UpdateChannel.MY_VERSION) },
                     modifier =
                         Modifier
                             .fillMaxWidth()
