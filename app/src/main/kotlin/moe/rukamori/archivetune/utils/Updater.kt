@@ -65,7 +65,8 @@ object Updater {
     private val releaseRepo: String
         get() = BuildConfig.RELEASE_GITHUB_REPO
 
-    private const val CommitHistoryBaseUrl = "https://api.github.com/repos/rukamori/ArchiveTune"
+    private val commitHistoryBaseUrl: String
+        get() = "https://api.github.com/repos/$releaseOwner/$releaseRepo"
 
     private val stableReleaseBaseUrl: String
         get() = "https://github.com/$releaseOwner/$releaseRepo/releases"
@@ -452,7 +453,7 @@ object Updater {
 
     suspend fun getCommitHistory(
         count: Int = 20,
-        branch: String = "dev",
+        branch: String = "main",
     ): Result<List<GitCommit>> =
         runCatchingCancellable {
             if (!isUpdaterDistribution) {
@@ -461,7 +462,7 @@ object Updater {
 
             val response =
                 client
-                    .get("$CommitHistoryBaseUrl/commits?sha=$branch&per_page=$count")
+                    .get("$commitHistoryBaseUrl/commits?sha=$branch&per_page=$count")
                     .bodyAsText()
             val jsonArray = JSONArray(response)
             val commits = mutableListOf<GitCommit>()
