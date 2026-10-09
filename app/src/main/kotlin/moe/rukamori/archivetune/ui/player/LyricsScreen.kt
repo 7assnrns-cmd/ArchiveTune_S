@@ -49,6 +49,7 @@ import androidx.compose.material3.Slider
 import androidx.compose.material3.SliderDefaults
 import androidx.compose.material3.Text
 import androidx.compose.material3.ripple
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -214,9 +215,21 @@ fun LyricsScreen(
                 ).lyricsHelper()
     }
 
-    LaunchedEffect(mediaMetadata.id, currentLyrics?.lyrics) {
+    // Priority: audio > player handoff > lyrics. Defer lyrics loading until
+    // the crossfade engine has finished handing off playback to the primary
+    // player, so we never race a lyrics fetch or text measurement against the
+    // audio buffer.
+    val playerConnection = LocalPlayerConnection.current
+    var isCrossfading by remember { mutableStateOf(false) }
+    LaunchedEffect(playerConnection) {
+        playerConnection?.isCrossfading?.collect { isCrossfading = it }
+    }
+    LaunchedEffect(mediaMetadata.id, currentLyrics?.lyrics, isCrossfading) {
         if (mediaMetadata.isPodcast) return@LaunchedEffect
         if (currentLyrics != null) return@LaunchedEffect
+        // If a crossfade is in progress, hold off. The LaunchedEffect will
+        // re-run when isCrossfading flips back to false.
+        if (isCrossfading) return@LaunchedEffect
         try {
             val existingLyrics =
                 withContext(Dispatchers.IO) {

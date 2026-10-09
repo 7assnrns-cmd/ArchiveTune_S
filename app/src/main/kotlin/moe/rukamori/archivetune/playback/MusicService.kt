@@ -104,6 +104,8 @@ import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -525,7 +527,14 @@ class MusicService :
     private var crossfadeJob: Job? = null
     private var secondaryCrossfadePlayer: ExoPlayer? = null
     private var secondaryCrossfadeTarget: CrossfadeTarget? = null
+    private val _isCrossfadingFlow = MutableStateFlow(false)
+    internal val isCrossfadingFlow: StateFlow<Boolean> = _isCrossfadingFlow.asStateFlow()
+
     private var isCrossfading = false
+        set(value) {
+            field = value
+            _isCrossfadingFlow.value = value
+        }
     private var crossfadeHandoffInProgress = false
     private var crossfadeBaseVolume = 1f
     private var crossfadeIncomingBaseVolume = 1f

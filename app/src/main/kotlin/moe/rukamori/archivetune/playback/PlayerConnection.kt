@@ -97,6 +97,7 @@ class PlayerConnection(
     val error = MutableStateFlow<PlaybackException?>(null)
     private var dismissedPlaybackError: PlaybackException? = null
     val waitingForNetworkConnection = service.waitingForNetworkConnection
+    val isCrossfading = service.isCrossfadingFlow
     val queueRestoreCompleted = service.queueRestoreCompleted
 
     internal val canvasNetworkAllowed = service.canvasPlaybackUseCase.policy
