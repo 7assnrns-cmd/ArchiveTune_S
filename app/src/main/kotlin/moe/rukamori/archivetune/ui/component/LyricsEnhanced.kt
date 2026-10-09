@@ -176,11 +176,20 @@ fun LyricsEnhanced(
     val translationScale by rememberPreference(LyricsTranslationScaleKey, defaultValue = 0.55f)
     val translationLineHeight by rememberPreference(LyricsTranslationLineHeightScaleKey, defaultValue = 0.75f)
     val translationItalic by rememberPreference(LyricsTranslationItalicKey, defaultValue = false)
+    val textColorMode = preferences?.textColorMode ?: LyricsTextColorMode.DEFAULT
+    val textColorCustom = preferences?.textColorCustom
     val textColor =
-        textColorOverride ?: if (playerBackground == PlayerBackgroundStyle.DEFAULT) {
-            MaterialTheme.colorScheme.onBackground
-        } else {
-            Color.White
+        when (textColorMode) {
+            LyricsTextColorMode.DEFAULT ->
+                textColorOverride
+                    ?: if (playerBackground == PlayerBackgroundStyle.DEFAULT) {
+                        MaterialTheme.colorScheme.onBackground
+                    } else {
+                        Color.White
+                    }
+            LyricsTextColorMode.DYNAMIC_THEME_PRIMARY -> MaterialTheme.colorScheme.primary
+            LyricsTextColorMode.DYNAMIC_THEME_TERTIARY -> MaterialTheme.colorScheme.tertiary
+            LyricsTextColorMode.CUSTOM -> textColorCustom ?: textColorOverride ?: Color.White
         }
     val lyricsLineBlur = lyricsLineBlurOverride ?: lyricsLineBlurPreference
 

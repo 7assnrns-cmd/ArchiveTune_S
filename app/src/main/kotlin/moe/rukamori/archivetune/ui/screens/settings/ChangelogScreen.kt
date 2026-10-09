@@ -49,7 +49,7 @@ fun ChangelogScreen(
         val result =
             when (channel) {
                 UpdateChannel.MY_VERSION -> Updater.getAllReleases(forceRefresh = forceRefresh)
-                else -> Updater.getAllReleases(forceRefresh = forceRefresh)
+                UpdateChannel.OFFICIAL_VERSION -> Updater.getOfficialReleases(forceRefresh = forceRefresh)
             }
         result
             .onSuccess { r ->
@@ -67,7 +67,7 @@ fun ChangelogScreen(
         val cachedReleases =
             when (channel) {
                 UpdateChannel.MY_VERSION -> Updater.getCachedReleases()
-                else -> Updater.getCachedReleases()
+                UpdateChannel.OFFICIAL_VERSION -> emptyList()
             }
         if (cachedReleases.isNotEmpty()) {
             releases = cachedReleases

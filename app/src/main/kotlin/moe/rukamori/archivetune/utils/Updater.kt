@@ -413,6 +413,9 @@ object Updater {
         return parseReleasesJson(response.bodyAsText(), stableReleaseArtifactName())
     }
 
+    suspend fun getOfficialReleases(forceRefresh: Boolean = false): Result<List<ReleaseInfo>> =
+        runCatchingCancellable { fetchOfficialReleases() }
+
     suspend fun getOfficialLatestReleaseInfo(forceRefresh: Boolean = false): Result<ReleaseInfo> =
         runCatchingCancellable {
             val releases = fetchOfficialReleases()
