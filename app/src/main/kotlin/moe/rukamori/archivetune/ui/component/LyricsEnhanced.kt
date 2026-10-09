@@ -90,7 +90,10 @@ import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeAlignment
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeLine
 import com.mocharealm.accompanist.lyrics.core.model.karaoke.KaraokeSyllable
 import com.mocharealm.accompanist.lyrics.core.model.synced.SyncedLine
+import com.mocharealm.accompanist.lyrics.ui.composable.list.LyricsLazyListState
+import com.mocharealm.accompanist.lyrics.ui.composable.list.rememberLyricsLazyListState
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
+import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.LyricsAnchor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import moe.rukamori.archivetune.LocalAnimationsDisabled
@@ -224,7 +227,8 @@ fun LyricsEnhanced(
         remember(player) {
             mutableLongStateOf(player.currentPosition.coerceAtLeast(0L))
         }
-    val listState = key(lyricsSessionKey) { rememberLazyListState() }
+    // Plain LazyListState for the un-synced (no timestamps) path.
+    val plainListState = key(lyricsSessionKey) { rememberLazyListState() }
 
     LaunchedEffect(lyricsSessionKey) {
         playbackPositionMs.longValue = player.currentPosition.coerceAtLeast(0L)
@@ -474,7 +478,7 @@ fun LyricsEnhanced(
             !isSynced -> {
                 PlainLyricsView(
                     lines = plainLyrics,
-                    listState = listState,
+                    listState = plainListState,
                     selectedLineKeys = selectedLineKeySet,
                     textColor = textColor,
                     textStyle = normalTextStyle,
@@ -499,12 +503,16 @@ fun LyricsEnhanced(
                 BoxWithConstraints(
                     modifier = Modifier.fillMaxSize(),
                 ) {
-                    val lyricsViewportOffset = remember(maxHeight) { maxHeight * 0.38f }
+                    // LyricsLazyListState is the 2.0 replacement for LazyListState
+                    // inside KaraokeLyricsView. It carries its own height index and
+                    // follow-anchor bookkeeping and must not be shared with the
+                    // regular LazyColumn used by PlainLyricsView.
+                    val karaokeListState = key(lyricsSessionKey) { rememberLyricsLazyListState() }
 
                     CompositionLocalProvider(LocalLayoutDirection provides lyricsLayoutDirection) {
                         key(lyricsSessionKey, syncedLyrics) {
                             KaraokeLyricsView(
-                                listState = listState,
+                                listState = karaokeListState,
                                 lyrics = syncedLyrics,
                                 currentPosition = playbackSyncPosition,
                                 onLineClicked = { line ->
@@ -533,7 +541,7 @@ fun LyricsEnhanced(
                                 useBlurEffect = lyricsLineBlur,
                                 showTranslation = showTranslations,
                                 showPhonetic = showPhonetics,
-                                offset = lyricsViewportOffset,
+                                anchor = LyricsAnchor.Fraction(viewportOffsetFraction),
                                 keepAliveZone = 72.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
