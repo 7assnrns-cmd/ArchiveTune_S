@@ -265,7 +265,11 @@ fun UpdateScreen(
 
     val updateSheetContent: @Composable ColumnScope.() -> Unit = {
         Text(
-            text = stringResource(R.string.new_update_available),
+            text = if (updateSheetIsSameVersion) {
+                stringResource(R.string.changelog)
+            } else {
+                stringResource(R.string.new_update_available)
+            },
             style = MaterialTheme.typography.headlineSmall.copy(fontWeight = FontWeight.Bold),
             modifier = Modifier.padding(top = 16.dp),
         )
@@ -320,7 +324,7 @@ fun UpdateScreen(
                 UpdateChannel.OFFICIAL_VERSION -> Updater.getOfficialLatestDownloadUrl()
             }
 
-        if (downloadUrl.isNotBlank()) {
+        if (downloadUrl.isNotBlank() && !updateSheetIsSameVersion) {
             if (useInAppUpdateInstaller) {
                 Button(
                     onClick = { installUpdate(downloadUrl) },
@@ -395,14 +399,13 @@ fun UpdateScreen(
                             updateSheetIsSameVersion = !Updater.isUpdateAvailable(version, BuildConfig.VERSION_NAME)
                             updateSheetVersion = version
 
+                            // Always show the changelog sheet, even when the
+                            // installed version matches the latest release.
+                            // The sheet omits the download buttons in that
+                            // case; it just shows the release notes.
+                            updateSheetState.show(updateSheetContent)
                             if (updateSheetIsSameVersion) {
-                                showUpdateUpToDateDialog = true
                                 onUpToDate()
-                            } else {
-                                // Show the changelog sheet for every channel.
-                                // The user chooses whether to download now or
-                                // hand the download to the background worker.
-                                updateSheetState.show(updateSheetContent)
                             }
                         }.onFailure { error ->
                             updateSheetError = error.message ?: context.getString(R.string.error_unknown)

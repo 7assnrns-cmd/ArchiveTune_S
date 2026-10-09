@@ -3545,7 +3545,19 @@ private data class PendingCrossfadeQueueSwap(
             if (player.currentMediaItemIndex != targetIndex) return false
             if (player.playbackState != Player.STATE_READY || !player.isPlaying) {
                 crossfadeHandoffProgress = 0f
-                applyEffectiveVolume()
+                // Keep primary silent and secondary at its handoff volume while
+                // primary finishes loading the incoming item. Previously this
+                // called applyEffectiveVolume(), which at handoff progress 0
+                // routes the equal-power curve to (primary = full, secondary = 0)
+                // — but primary is silent while loading, so the user heard pure
+                // silence for the entire seek. That was the ~0.4s gap on manual
+                // crossfade.
+                val holdVolume =
+                    (secondaryCrossfadeTarget?.let {
+                        currentEffectivePlayerVolumeForMediaId(it.mediaId)
+                    } ?: crossfadeIncomingBaseVolume).coerceIn(0f, maxSafeGainFactor)
+                localPlayer.volume = 0f
+                incomingPlayer.volume = holdVolume
                 if (!awaitPrimaryPositionAdvance(targetIndex, lastConfirmedPrimaryPositionMs)) return false
                 lastConfirmedPrimaryPositionMs = player.currentPosition.coerceAtLeast(0L)
                 startedAtMs = android.os.SystemClock.elapsedRealtime()
