@@ -1140,25 +1140,22 @@ private fun buildLineSyncedLrcLine(
     val translation = providedTranslationTextForEntry(entry)
     val normalizedRomanizedText = romanizedText?.trim()?.takeIf { it.isNotEmpty() }
 
-    if (normalizedRomanizedText == null) {
-        return SyncedLine(
-            content = entry.text,
-            translation = translation,
-            start = start,
-            end = end,
-        )
-    }
-
-    val syllables =
-        buildWrappingKaraokeSyllables(
-            content = entry.text,
-            romanizedText = normalizedRomanizedText,
-            start = start,
-            end = end,
-        )
+    // Line-synced lyrics highlight the whole line at once. Splitting the
+    // text into per-character syllables (as an earlier draft did) makes
+    // the library lay out each character as an independent unit, which
+    // causes wrapping, size and baseline mismatches on screen. When a
+    // romanization is present, attach it to the single syllable covering
+    // the line, so the phonetic label renders alongside the line text
+    // without splitting the highlight.
+    val syllable = KaraokeSyllable(
+        content = entry.text,
+        start = start,
+        end = end.coerceAtLeast(start + MIN_KARAOKE_SYLLABLE_DURATION_MS),
+        phonetic = normalizedRomanizedText,
+    )
 
     return KaraokeLine.MainKaraokeLine(
-        syllables = syllables,
+        syllables = listOf(syllable),
         translation = translation,
         alignment = KaraokeAlignment.Start,
         start = start,
