@@ -103,6 +103,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.async
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.combine
@@ -3688,14 +3689,72 @@ private data class PendingCrossfadeQueueSwap(
         crossfadeSuppressedMediaId = currentMediaId
 
         Timber.tag(TAG).w("Falling back to primary playback after crossfade failure: reason=%s", reason)
-        cancelCrossfade(resetVolume = true, resetPauseAtEnd = true)
 
-        if (!shouldResumePlayback || player.currentMediaItem == null) return
+        // Detach the secondary player without releasing it, so the user keeps
+        // hearing sound while the primary finishes buffering the incoming item.
+        // The previous implementation released it immediately, which left the
+        // primary as the only audio source — but the primary was still loading
+        // and silent, producing a short gap of silence on abort.
+        val secondarySnapshot = secondaryCrossfadePlayer
+        val secondaryBaseVolume = crossfadeIncomingBaseVolume
 
-        if (primaryAtEnd && targetIndex != C.INDEX_UNSET) {
+        pendingCrossfadeQueueSwap = null
+        crossfadeTriggerJob?.cancel()
+        crossfadeTriggerJob = null
+        crossfadeJob?.cancel()
+        crossfadeJob = null
+        isCrossfading = false
+        crossfadeHandoffInProgress = false
+        crossfadeHandoffProgress = 0f
+        crossfadeProgress = 0f
+        crossfadeIncomingBaseVolume = 1f
+        crossfadePlaybackRequested = false
+        localPlayer.pauseAtEndOfMediaItems = false
+
+        if (!shouldResumePlayback || player.currentMediaItem == null) {
+            releaseSecondaryCrossfadePlayer()
+            applyEffectiveVolumeImmediately()
+            return
+        }
+
+        if (targetIndex != C.INDEX_UNSET && player.currentMediaItemIndex != targetIndex) {
+            player.seekTo(targetIndex, 0L)
+        } else if (primaryAtEnd && targetIndex != C.INDEX_UNSET) {
             player.seekTo(targetIndex, 0L)
         }
+        player.playWhenReady = true
         player.play()
+
+        if (secondarySnapshot != null && secondaryBaseVolume > 0f) {
+            secondarySnapshot.volume = secondaryBaseVolume.coerceIn(0f, maxSafeGainFactor)
+            localPlayer.volume = 0f
+            scope.launch {
+                val deadline = android.os.SystemClock.elapsedRealtime() + 3_000L
+                while (
+                    kotlinx.coroutines.currentCoroutineContext().isActive &&
+                    android.os.SystemClock.elapsedRealtime() < deadline
+                ) {
+                    val state = player.playbackState
+                    if (state == Player.STATE_READY && player.isPlaying) break
+                    if (state == Player.STATE_IDLE) break
+                    kotlinx.coroutines.delay(20L)
+                }
+                // One extra frame so the audio output has started.
+                kotlinx.coroutines.delay(50L)
+                runCatching { secondarySnapshot.removeListener(secondaryCrossfadeListener) }
+                runCatching { secondarySnapshot.stop() }
+                runCatching { secondarySnapshot.clearMediaItems() }
+                runCatching { secondarySnapshot.release() }
+                if (secondaryCrossfadePlayer === secondarySnapshot) {
+                    secondaryCrossfadePlayer = null
+                    secondaryCrossfadeTarget = null
+                }
+                applyEffectiveVolumeImmediately()
+            }
+        } else {
+            releaseSecondaryCrossfadePlayer()
+            applyEffectiveVolumeImmediately()
+        }
     }
 
     private fun releaseSecondaryCrossfadePlayer() {

@@ -605,7 +605,12 @@ fun LyricsEnhanced(
                                     if (isSelectionModeActive) {
                                         toggleSelectedLine(line.selectionKey())
                                     } else if (lyricsClick && isSynced && line.start > 0) {
-                                        player.seekTo(line.start.toLong())
+                                        // Start playback 500 ms before the line's
+                                        // first syllable so the user hears the
+                                        // attack of the word instead of jumping
+                                        // straight into the middle of it.
+                                        val targetMs = (line.start.toLong() - 500L).coerceAtLeast(0L)
+                                        player.seekTo(targetMs)
                                     }
                                 },
                                 onLinePressed = { line ->
