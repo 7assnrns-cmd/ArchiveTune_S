@@ -541,7 +541,10 @@ fun LyricsEnhanced(
                                 useBlurEffect = lyricsLineBlur,
                                 showTranslation = showTranslations,
                                 showPhonetic = showPhonetics,
-                                anchor = LyricsAnchor.Fraction(viewportOffsetFraction),
+                                // 0.38 matches the previous pixel-based offset
+                                // (maxHeight * 0.38f), now expressed as a fraction
+                                // of the viewport height.
+                                anchor = LyricsAnchor.Fraction(0.38f),
                                 keepAliveZone = 72.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
