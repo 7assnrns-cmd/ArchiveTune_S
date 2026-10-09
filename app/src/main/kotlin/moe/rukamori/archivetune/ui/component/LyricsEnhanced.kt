@@ -96,6 +96,7 @@ import com.mocharealm.accompanist.lyrics.core.model.synced.SyncedLine
 import com.mocharealm.accompanist.lyrics.ui.composable.list.LyricsLazyListState
 import com.mocharealm.accompanist.lyrics.ui.composable.list.rememberLyricsLazyListState
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.KaraokeLyricsView
+import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.LyricsCaptionPosition
 import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.LyricsAnchor
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -112,6 +113,8 @@ import moe.rukamori.archivetune.constants.LyricsViewportOffsetFractionKey
 import moe.rukamori.archivetune.constants.LyricsKeepAliveZoneDpKey
 import moe.rukamori.archivetune.constants.LyricsSelectionLimitKey
 import moe.rukamori.archivetune.constants.LyricsTranslationScaleKey
+import moe.rukamori.archivetune.constants.LyricsTranslationPositionKey
+import moe.rukamori.archivetune.constants.LyricsPhoneticPositionKey
 import moe.rukamori.archivetune.constants.LyricsTranslationLineHeightScaleKey
 import moe.rukamori.archivetune.constants.LyricsTranslationItalicKey
 import moe.rukamori.archivetune.lyrics.LyricsEntry
@@ -178,6 +181,14 @@ fun LyricsEnhanced(
     val translationScale by rememberPreference(LyricsTranslationScaleKey, defaultValue = 0.55f)
     val translationLineHeight by rememberPreference(LyricsTranslationLineHeightScaleKey, defaultValue = 0.75f)
     val translationItalic by rememberPreference(LyricsTranslationItalicKey, defaultValue = false)
+    val translationPosition by rememberEnumPreference(
+        LyricsTranslationPositionKey,
+        defaultValue = LyricsCaptionPosition.BELOW,
+    )
+    val phoneticPosition by rememberEnumPreference(
+        LyricsPhoneticPositionKey,
+        defaultValue = LyricsCaptionPosition.ABOVE,
+    )
     val textColorMode = preferences?.textColorMode ?: LyricsTextColorMode.DEFAULT
     val textColorCustom = preferences?.textColorCustom
     val textColor =
@@ -617,6 +628,8 @@ fun LyricsEnhanced(
                                 useBlurEffect = lyricsLineBlur,
                                 showTranslation = showTranslations,
                                 showPhonetic = showPhonetics,
+                                translationPosition = translationPosition,
+                                phoneticPosition = phoneticPosition,
                                 anchor = LyricsAnchor.Fraction(viewportOffset),
                                 keepAliveZone = keepAliveZoneDp.dp,
                                 modifier = Modifier.fillMaxSize(),

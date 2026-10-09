@@ -1161,4 +1161,8 @@
     <string name="updates_cancel_download">Cancel download</string>
     <string name="updates_downloading">Downloading…</string>
     <string name="updates_download_state_title">Background downloads</string>
+    <string name="lyrics_translation_position_title">Translation position</string>
+    <string name="lyrics_phonetic_position_title">Phonetic position</string>
+    <string name="lyrics_caption_position_above">Above</string>
+    <string name="lyrics_caption_position_below">Below</string>
 </resources>

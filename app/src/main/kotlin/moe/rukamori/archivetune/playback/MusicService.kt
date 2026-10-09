@@ -2794,6 +2794,17 @@ private data class PendingCrossfadeQueueSwap(
                     player.seekTo(targetIndex, incomingPosition)
                     player.playWhenReady = true
 
+                    // Manual path bypasses finishCrossfade, so it also bypassed
+                    // the awaitPrimaryCrossfadeHandoffReady guard the auto path
+                    // relies on. Without it the ramp started while primary was
+                    // still rebuffering on the target item — producing the gap
+                    // the user reported between the old and new track.
+                    if (!awaitPrimaryCrossfadeHandoffReady(incoming)) {
+                        Timber.tag(TAG).w("CF-iq: primary not ready for handoff")
+                        abortCrossfadeAndResumePrimary("manual_handoff_not_ready")
+                        return@launch
+                    }
+                    
                     crossfadeHandoffInProgress = true
                     crossfadeHandoffProgress = 0f
                     try {
@@ -9176,8 +9187,8 @@ private data class PendingCrossfadeQueueSwap(
         const val CROSSFADE_HANDOFF_READY_TIMEOUT_MS = 5_000L
         const val CROSSFADE_HANDOFF_BUFFER_MS = 5_000L
         const val CROSSFADE_HANDOFF_SEEK_GUARD_MS = 750L
-        const val CROSSFADE_HANDOFF_MAX_DRIFT_MS = 75L
-        const val CROSSFADE_HANDOFF_DURATION_MS = 96L
+        const val CROSSFADE_HANDOFF_MAX_DRIFT_MS = 250L
+        const val CROSSFADE_HANDOFF_DURATION_MS = 500L
         const val CROSSFADE_HANDOFF_FRAME_MS = 8L
         const val CROSSFADE_HANDOFF_POLL_MS = 10L
         const val CROSSFADE_MIN_BUFFER_BEFORE_START_MS = 5_000L

@@ -778,7 +778,9 @@ val LyricsSelectionLimitKey = intPreferencesKey("lyricsSelectionLimit")
 
 // Enhanced — display overrides
 val LyricsTranslationOverrideKey = stringPreferencesKey("lyricsTranslationOverride")
+val LyricsTranslationPositionKey = stringPreferencesKey("lyricsTranslationPosition")
 val LyricsPhoneticOverrideKey = stringPreferencesKey("lyricsPhoneticOverride")
+val LyricsPhoneticPositionKey = stringPreferencesKey("lyricsPhoneticPosition")
 val LyricsSmoothPlaybackKey = booleanPreferencesKey("lyricsSmoothPlayback")
 
 // Lyrics text colour (merged with dynamic theme)

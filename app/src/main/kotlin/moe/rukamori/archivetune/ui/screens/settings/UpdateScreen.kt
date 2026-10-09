@@ -65,6 +65,7 @@ import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.WavyProgressIndicatorDefaults
@@ -320,12 +321,46 @@ fun UpdateScreen(
             }
 
         if (downloadUrl.isNotBlank()) {
-            Button(
-                onClick = { installUpdate(downloadUrl) },
-                modifier = Modifier.fillMaxWidth(),
-                shapes = ButtonDefaults.shapes(),
-            ) {
-                Text(text = stringResource(R.string.update_text))
+            if (useInAppUpdateInstaller) {
+                Button(
+                    onClick = { installUpdate(downloadUrl) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shapes = ButtonDefaults.shapes(),
+                ) {
+                    Text(text = stringResource(R.string.update_text))
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(
+                    onClick = {
+                        val versionForDownload = updateSheetVersion ?: latestVersion
+                        if (versionForDownload != null) {
+                            UpdateDownloadScheduler.schedule(
+                                context,
+                                downloadUrl,
+                                versionForDownload,
+                                updatesWifiOnly,
+                            )
+                            coroutineScope.launch {
+                                snackbarHostState.showSnackbar(
+                                    context.getString(R.string.updates_download_in_background),
+                                )
+                            }
+                            updateSheetState.hide()
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shapes = ButtonDefaults.shapes(),
+                ) {
+                    Text(text = stringResource(R.string.updates_download_in_background))
+                }
+            } else {
+                Button(
+                    onClick = { openUpdateUrl(downloadUrl) },
+                    modifier = Modifier.fillMaxWidth(),
+                    shapes = ButtonDefaults.shapes(),
+                ) {
+                    Text(text = stringResource(R.string.update_text))
+                }
             }
         }
 
@@ -363,10 +398,10 @@ fun UpdateScreen(
                             if (updateSheetIsSameVersion) {
                                 showUpdateUpToDateDialog = true
                                 onUpToDate()
-                            } else if (updateChannel == UpdateChannel.MY_VERSION) {
-                                val downloadUrl = Updater.getLatestDownloadUrl()
-                                installUpdate(downloadUrl)
                             } else {
+                                // Show the changelog sheet for every channel.
+                                // The user chooses whether to download now or
+                                // hand the download to the background worker.
                                 updateSheetState.show(updateSheetContent)
                             }
                         }.onFailure { error ->

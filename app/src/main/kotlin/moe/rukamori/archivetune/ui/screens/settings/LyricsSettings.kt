@@ -102,6 +102,7 @@ import moe.rukamori.archivetune.constants.LyricsEnhancedPhoneticScaleKey
 import moe.rukamori.archivetune.constants.LyricsInactiveLineAlphaKey
 import moe.rukamori.archivetune.constants.LyricsKeepAliveZoneDpKey
 import moe.rukamori.archivetune.constants.LyricsPhoneticOverrideKey
+import com.mocharealm.accompanist.lyrics.ui.composable.lyrics.LyricsCaptionPosition
 import moe.rukamori.archivetune.constants.LyricsSelectionLimitKey
 import moe.rukamori.archivetune.constants.LyricsSmoothPlaybackKey
 import moe.rukamori.archivetune.constants.LyricsTextColorModeKey
@@ -114,6 +115,8 @@ import moe.rukamori.archivetune.constants.LyricsTranslationScaleKey
 import moe.rukamori.archivetune.constants.LyricsTextColorCustomKey
 import moe.rukamori.archivetune.constants.LyricsTextContrastGuardKey
 import moe.rukamori.archivetune.constants.LyricsTranslationOverrideKey
+import moe.rukamori.archivetune.constants.LyricsTranslationPositionKey
+import moe.rukamori.archivetune.constants.LyricsPhoneticPositionKey
 import moe.rukamori.archivetune.constants.LyricsViewportOffsetFractionKey
 import moe.rukamori.archivetune.constants.PaxsenixApiKeyKey
 import moe.rukamori.archivetune.lyrics.LyricsEnhancedFontWeight
@@ -258,6 +261,10 @@ fun LyricsSettings(
         rememberEnumPreference(LyricsTranslationOverrideKey, defaultValue = LyricsVisibilityOverride.AUTO)
     val (phoneticOverride, onPhoneticOverrideChange) =
         rememberEnumPreference(LyricsPhoneticOverrideKey, defaultValue = LyricsVisibilityOverride.AUTO)
+    val (translationPosition, onTranslationPositionChange) =
+        rememberEnumPreference(LyricsTranslationPositionKey, defaultValue = LyricsCaptionPosition.BELOW)
+    val (phoneticPosition, onPhoneticPositionChange) =
+        rememberEnumPreference(LyricsPhoneticPositionKey, defaultValue = LyricsCaptionPosition.ABOVE)
     val (smoothPlaybackEnabled, onSmoothPlaybackChange) =
         rememberPreference(LyricsSmoothPlaybackKey, defaultValue = true)
 
@@ -706,6 +713,36 @@ fun LyricsSettings(
                             LyricsVisibilityOverride.AUTO -> "Auto"
                             LyricsVisibilityOverride.ALWAYS_ON -> "Always on"
                             LyricsVisibilityOverride.ALWAYS_OFF -> "Off"
+                        }
+                    },
+                )
+            }
+
+            item {
+                EnumListPreference(
+                    title = { Text(stringResource(R.string.lyrics_translation_position_title)) },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    selectedValue = translationPosition,
+                    onValueSelected = onTranslationPositionChange,
+                    valueText = {
+                        when (it) {
+                            LyricsCaptionPosition.ABOVE -> stringResource(R.string.lyrics_caption_position_above)
+                            LyricsCaptionPosition.BELOW -> stringResource(R.string.lyrics_caption_position_below)
+                        }
+                    },
+                )
+            }
+
+            item {
+                EnumListPreference(
+                    title = { Text(stringResource(R.string.lyrics_phonetic_position_title)) },
+                    icon = { Icon(painterResource(R.drawable.lyrics), null) },
+                    selectedValue = phoneticPosition,
+                    onValueSelected = onPhoneticPositionChange,
+                    valueText = {
+                        when (it) {
+                            LyricsCaptionPosition.ABOVE -> stringResource(R.string.lyrics_caption_position_above)
+                            LyricsCaptionPosition.BELOW -> stringResource(R.string.lyrics_caption_position_below)
                         }
                     },
                 )
