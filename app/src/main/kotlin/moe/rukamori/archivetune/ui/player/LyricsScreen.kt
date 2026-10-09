@@ -219,10 +219,9 @@ fun LyricsScreen(
     // the crossfade engine has finished handing off playback to the primary
     // player, so we never race a lyrics fetch or text measurement against the
     // audio buffer.
-    val playerConnection = LocalPlayerConnection.current
     var isCrossfading by remember { mutableStateOf(false) }
     LaunchedEffect(playerConnection) {
-        playerConnection?.isCrossfading?.collect { isCrossfading = it }
+        playerConnection.isCrossfading.collect { isCrossfading = it }
     }
     LaunchedEffect(mediaMetadata.id, currentLyrics?.lyrics, isCrossfading) {
         if (mediaMetadata.isPodcast) return@LaunchedEffect
