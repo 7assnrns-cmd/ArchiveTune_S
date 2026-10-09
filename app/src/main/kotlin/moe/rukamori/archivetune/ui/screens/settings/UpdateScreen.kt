@@ -164,14 +164,18 @@ fun UpdateScreen(
     val updateSettingsControlsEnabled = updateSettingsState is UpdateSettingsScreenState.Success
     val updateSettingsErrorRes = (updateSettingsState as? UpdateSettingsScreenState.Error)?.messageRes
     val onUpdateSettingsAction = remember(viewModel) { viewModel::onAction }
-    val (autoDownloadUpdates, onAutoDownloadUpdatesChange) =
-        rememberPreference(AutoDownloadUpdatesKey, defaultValue = false)
-    val (updatesWifiOnly, onUpdatesWifiOnlyChange) =
-        rememberPreference(UpdatesWifiOnlyKey, defaultValue = true)
-    val (updatesAutoInstall, onUpdatesAutoInstallChange) =
-        rememberPreference(UpdatesAutoInstallKey, defaultValue = false)
-    val (downloadedApkVersion, onDownloadedApkVersionChange) =
-        rememberPreference(UpdatesDownloadedApkVersionKey, defaultValue = "")
+    val autoDownloadUpdatesState = rememberPreference(AutoDownloadUpdatesKey, defaultValue = false)
+    val autoDownloadUpdates = autoDownloadUpdatesState.value
+    val onAutoDownloadUpdatesChange: (Boolean) -> Unit = { autoDownloadUpdatesState.value = it }
+    val updatesWifiOnlyState = rememberPreference(UpdatesWifiOnlyKey, defaultValue = true)
+    val updatesWifiOnly = updatesWifiOnlyState.value
+    val onUpdatesWifiOnlyChange: (Boolean) -> Unit = { updatesWifiOnlyState.value = it }
+    val updatesAutoInstallState = rememberPreference(UpdatesAutoInstallKey, defaultValue = false)
+    val updatesAutoInstall = updatesAutoInstallState.value
+    val onUpdatesAutoInstallChange: (Boolean) -> Unit = { updatesAutoInstallState.value = it }
+    val downloadedApkVersionState = rememberPreference(UpdatesDownloadedApkVersionKey, defaultValue = "")
+    val downloadedApkVersion = downloadedApkVersionState.value
+    val onDownloadedApkVersionChange: (String) -> Unit = { downloadedApkVersionState.value = it }
 
     val (updateChannel, onUpdateChannelChange) =
         rememberEnumPreference(

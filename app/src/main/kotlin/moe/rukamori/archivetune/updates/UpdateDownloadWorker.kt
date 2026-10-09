@@ -8,6 +8,7 @@
 package moe.rukamori.archivetune.updates
 
 import android.content.Context
+import androidx.datastore.preferences.core.edit
 import androidx.work.CoroutineWorker
 import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
