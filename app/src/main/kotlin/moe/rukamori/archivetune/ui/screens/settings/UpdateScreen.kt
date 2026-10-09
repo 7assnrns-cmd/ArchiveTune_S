@@ -124,6 +124,7 @@ import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.AppUpdateInstaller
 import moe.rukamori.archivetune.utils.GitCommit
 import moe.rukamori.archivetune.utils.Updater
+import moe.rukamori.archivetune.utils.rememberPreference
 import moe.rukamori.archivetune.utils.rememberEnumPreference
 import moe.rukamori.archivetune.viewmodels.UpdateSettingsAction
 import moe.rukamori.archivetune.viewmodels.UpdateSettingsScreenState
