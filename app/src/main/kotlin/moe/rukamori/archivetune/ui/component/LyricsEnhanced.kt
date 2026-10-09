@@ -73,6 +73,8 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.BlendMode
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.CompositingStrategy
+import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalLayoutDirection
 import androidx.compose.ui.res.painterResource
@@ -511,6 +513,14 @@ fun LyricsEnhanced(
 
                     CompositionLocalProvider(LocalLayoutDirection provides lyricsLayoutDirection) {
                         key(lyricsSessionKey, syncedLyrics) {
+                            // Offscreen layer so lyricsEdgeFade's DstIn masks stay
+                            // scoped to the lyrics instead of punching through to the
+                            // parent composition (which painted the dark rectangle).
+                            Box(
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen },
+                            ) {
                             KaraokeLyricsView(
                                 listState = karaokeListState,
                                 lyrics = syncedLyrics,
@@ -548,6 +558,8 @@ fun LyricsEnhanced(
                                 keepAliveZone = 72.dp,
                                 modifier = Modifier.fillMaxSize(),
                             )
+                        
+                            }
                         }
                     }
                 }
