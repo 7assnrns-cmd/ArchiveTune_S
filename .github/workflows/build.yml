@@ -211,6 +211,10 @@ jobs:
               continue
             fi
             cp "$apk" "out/ArchiveTune S ${TAG} ${arch}.apk"
+            # Backward-compatible alias so older apps (<= v1.2.8) can still
+            # find the asset under the previous naming scheme. Drop this in
+            # v1.4.0 once most installs are on v1.3.x.
+            cp "$apk" "out/app-gms-mobile-${arch}-release.apk"
           done
           echo "Renamed APKs:"
           ls -lh out/
