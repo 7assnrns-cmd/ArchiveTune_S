@@ -14,6 +14,8 @@ import io.ktor.client.HttpClient
 import io.ktor.client.engine.okhttp.OkHttp
 import io.ktor.client.request.prepareGet
 import io.ktor.client.statement.bodyAsChannel
+import io.ktor.http.HttpHeaders
+import io.ktor.client.request.headers
 import io.ktor.http.contentLength
 import io.ktor.utils.io.readAvailable
 import kotlinx.coroutines.CancellationException
@@ -25,6 +27,7 @@ import moe.rukamori.archivetune.BuildConfig
 import moe.rukamori.archivetune.updates.UpdateApkStorage
 import okhttp3.ConnectionPool
 import java.io.File
+import java.io.FileOutputStream
 import java.io.IOException
 import java.util.Locale
 import java.util.concurrent.TimeUnit
@@ -93,25 +96,55 @@ object AppUpdateInstaller {
 
         UpdateApkStorage.clearLegacyCache(context)
         val targetApk = UpdateApkStorage.apkFile(context)
-        // Write to a temporary path first. Only rename it to the final
-        // apkFile once the download is complete, so a partially-written
-        // file can never be picked up by installDownloaded and offered to
-        // the package installer.
         val downloadedFile = UpdateApkStorage.tmpFile(context)
-        downloadedFile.takeIf { it.exists() }?.delete()
-        targetApk.takeIf { it.exists() }?.delete()
 
-        client.prepareGet(url).execute { response ->
-            val responseCode = response.status.value
-            if (responseCode !in 200..299) {
-                throw IOException("Update download failed: HTTP $responseCode")
+        // Resume: only valid when the sidecar URL matches. A different URL
+        // means a different version or ABI, so we start from scratch.
+        val storedUrl = UpdateApkStorage.readTmpUrl(context)
+        val existingBytes =
+            if (downloadedFile.isFile && downloadedFile.length() > 0L && storedUrl == url) {
+                downloadedFile.length()
+            } else {
+                downloadedFile.takeIf { it.exists() }?.delete()
+                targetApk.takeIf { it.exists() }?.delete()
+                UpdateApkStorage.writeTmpUrl(context, url)
+                0L
             }
 
-            val totalBytes = response.contentLength() ?: -1L
+        client.prepareGet(url) {
+            if (existingBytes > 0L) {
+                headers.append(HttpHeaders.Range, "bytes=$existingBytes-")
+            }
+        }.execute { response ->
+            val responseCode = response.status.value
+
+            // 206 = Partial Content (resume worked)
+            // 200 = OK (server ignored Range; must restart from 0)
+            // 416 = Range Not Satisfiable (local file is already at/beyond
+            //       the remote size; assume it is complete)
+            when (responseCode) {
+                206, 200 -> { /* continue */ }
+                416 -> {
+                    emitProgress(existingBytes, existingBytes, onProgress)
+                    return@execute
+                }
+                else -> throw IOException("Update download failed: HTTP $responseCode")
+            }
+
+            val append = responseCode == 206
+            val contentLength = response.contentLength() ?: -1L
+            val totalBytes =
+                if (append && contentLength >= 0L) existingBytes + contentLength else contentLength
+
+            if (!append) {
+                // Server sent a full body; restart.
+                downloadedFile.takeIf { it.exists() }?.delete()
+            }
+
             val channel = response.bodyAsChannel()
-            downloadedFile.outputStream().use { output ->
+            FileOutputStream(downloadedFile, append).use { output ->
                 val buffer = ByteArray(STREAM_BUFFER_SIZE)
-                var downloadedBytes = 0L
+                var downloadedBytes = if (append) existingBytes else 0L
                 var lastUpdateMs = 0L
                 while (!channel.isClosedForRead) {
                     currentCoroutineContext().ensureActive()

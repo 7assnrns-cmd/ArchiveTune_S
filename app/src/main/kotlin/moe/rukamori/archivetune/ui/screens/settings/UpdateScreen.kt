@@ -220,7 +220,7 @@ fun UpdateScreen(
     var showUpdateErrorDialog by remember { mutableStateOf(false) }
     var updateSheetApkAssets by remember { mutableStateOf<List<ApkAsset>>(emptyList()) }
     var showAbiPickerDialog by remember { mutableStateOf(false) }
-    var pendingDownloadMethod by remember { mutableStateOf<DownloadMethod?>(null) }
+    var pendingFallbackUrl by remember { mutableStateOf<String?>(null) }
     var updateDownloadProgress by remember { mutableStateOf<Float?>(null) }
     var updateDownloadJob by remember { mutableStateOf<kotlinx.coroutines.Job?>(null) }
     var showUpdateDownloadDialog by remember { mutableStateOf(false) }
@@ -240,33 +240,31 @@ fun UpdateScreen(
         }
     }
 
-    val startDownloadNow: (String, DownloadMethod) -> Unit = { url, method ->
+    val startDownloadNow: (String) -> Unit = { url ->
         val versionForDownload = updateSheetVersion ?: latestVersion ?: BuildConfig.VERSION_NAME
         UpdateDownloadScheduler.cancel(context)
         updateDownloadJob?.cancel()
         updateDownloadJob = null
         UpdateDownloadScheduler.schedule(context, url, versionForDownload, updatesWifiOnly)
-        if (method == DownloadMethod.BACKGROUND) {
-            coroutineScope.launch {
-                snackbarHostState.showSnackbar(
-                    context.getString(R.string.updates_download_in_background),
-                )
-            }
+        coroutineScope.launch {
+            snackbarHostState.showSnackbar(
+                context.getString(R.string.updates_download_started),
+            )
         }
         updateSheetState.dismiss()
     }
 
-    val resolveAndDownload: (String, DownloadMethod) -> Unit = { fallbackUrl, method ->
+    val resolveAndDownload: (String) -> Unit = { fallbackUrl ->
         val deviceArch = Updater.detectDeviceArchitecture()
         val assets = updateSheetApkAssets
         val deviceAsset = deviceArch?.let { arch -> assets.firstOrNull { it.architecture == arch } }
         val universalAsset = assets.firstOrNull { it.architecture == "universal" }
         if (deviceAsset != null && universalAsset != null) {
-            pendingDownloadMethod = method
+            pendingFallbackUrl = fallbackUrl
             showAbiPickerDialog = true
         } else {
             val url = deviceAsset?.url ?: universalAsset?.url ?: fallbackUrl
-            startDownloadNow(url, method)
+            startDownloadNow(url)
         }
     }
 
@@ -274,7 +272,7 @@ fun UpdateScreen(
         if (!useInAppUpdateInstaller) {
             openUpdateUrl(url)
         } else {
-            resolveAndDownload(url, DownloadMethod.NOW)
+            resolveAndDownload(url)
         }
     }
 
@@ -340,32 +338,15 @@ fun UpdateScreen(
             }
 
         if (downloadUrl.isNotBlank() && !updateSheetIsSameVersion) {
-            if (useInAppUpdateInstaller) {
-                Button(
-                    onClick = { installUpdate(downloadUrl) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(text = stringResource(R.string.update_text))
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(
-                    onClick = {
-                        resolveAndDownload(downloadUrl, DownloadMethod.BACKGROUND)
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(text = stringResource(R.string.updates_download_in_background))
-                }
-            } else {
-                Button(
-                    onClick = { openUpdateUrl(downloadUrl) },
-                    modifier = Modifier.fillMaxWidth(),
-                    shapes = ButtonDefaults.shapes(),
-                ) {
-                    Text(text = stringResource(R.string.update_text))
-                }
+            Button(
+                onClick = {
+                    if (useInAppUpdateInstaller) installUpdate(downloadUrl)
+                    else openUpdateUrl(downloadUrl)
+                },
+                modifier = Modifier.fillMaxWidth(),
+                shapes = ButtonDefaults.shapes(),
+            ) {
+                Text(text = stringResource(R.string.update_text))
             }
         }
 
@@ -379,11 +360,10 @@ fun UpdateScreen(
                 updateSheetApkAssets.firstOrNull { it.architecture == arch }
             }
         val universalAsset = updateSheetApkAssets.firstOrNull { it.architecture == "universal" }
-        val method = pendingDownloadMethod
         AlertDialog(
             onDismissRequest = {
                 showAbiPickerDialog = false
-                pendingDownloadMethod = null
+                pendingFallbackUrl = null
             },
             title = { Text(stringResource(R.string.update_abi_picker_title)) },
             text = {
@@ -392,8 +372,8 @@ fun UpdateScreen(
                         Button(
                             onClick = {
                                 showAbiPickerDialog = false
-                                if (method != null) startDownloadNow(deviceAsset.url, method)
-                                pendingDownloadMethod = null
+                                startDownloadNow(deviceAsset.url)
+                                pendingFallbackUrl = null
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shapes = ButtonDefaults.shapes(),
@@ -414,8 +394,8 @@ fun UpdateScreen(
                         OutlinedButton(
                             onClick = {
                                 showAbiPickerDialog = false
-                                if (method != null) startDownloadNow(universalAsset.url, method)
-                                pendingDownloadMethod = null
+                                startDownloadNow(universalAsset.url)
+                                pendingFallbackUrl = null
                             },
                             modifier = Modifier.fillMaxWidth(),
                             shapes = ButtonDefaults.shapes(),
@@ -438,7 +418,7 @@ fun UpdateScreen(
             dismissButton = {
                 TextButton(onClick = {
                     showAbiPickerDialog = false
-                    pendingDownloadMethod = null
+                    pendingFallbackUrl = null
                 }) {
                     Text(stringResource(android.R.string.cancel))
                 }
@@ -1673,7 +1653,6 @@ private fun formatCommitDate(isoDate: String): String =
     }
 
 
-private enum class DownloadMethod { NOW, BACKGROUND }
 
 private fun formatApkSize(bytes: Long): String {
     if (bytes <= 0L) return "size unknown"

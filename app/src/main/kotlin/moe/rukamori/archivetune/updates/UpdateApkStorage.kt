@@ -31,6 +31,24 @@ object UpdateApkStorage {
 
     fun hasPendingApk(context: Context): Boolean = apkFile(context).let { it.isFile && it.length() > 0L }
 
+    /**
+     * Sidecar file that records which URL the in-flight .download file
+     * belongs to. Resume is only valid when the URL matches; a different
+     * version or ABI must start a fresh download.
+     */
+    fun tmpUrlFile(context: Context): File = File(directory(context), "archivetune-update.url")
+
+    fun readTmpUrl(context: Context): String? =
+        tmpUrlFile(context).takeIf { it.isFile }?.readText()?.trim()?.takeIf { it.isNotBlank() }
+
+    fun writeTmpUrl(context: Context, url: String) {
+        runCatching { tmpUrlFile(context).writeText(url) }
+    }
+
+    fun deleteTmpUrl(context: Context) {
+        runCatching { tmpUrlFile(context).takeIf { it.exists() }?.delete() }
+    }
+
     fun deletePendingApk(context: Context) {
         apkFile(context).takeIf { it.exists() }?.delete()
     }

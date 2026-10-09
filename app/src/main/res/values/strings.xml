@@ -1170,4 +1170,5 @@
     <string name="update_abi_best_device">Best for your device</string>
     <string name="update_abi_universal">Universal (all devices)</string>
     <string name="update_abi_size_unknown">size unknown</string>
+    <string name="updates_download_started">Download started</string>
 </resources>

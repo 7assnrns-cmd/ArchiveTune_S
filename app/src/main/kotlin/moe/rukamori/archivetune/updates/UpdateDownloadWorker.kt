@@ -27,6 +27,16 @@ class UpdateDownloadWorker(
         val version = inputData.getString(KEY_VERSION) ?: return Result.failure()
         val notifier = UpdateDownloadNotifier(applicationContext)
         notifier.createChannel()
+
+        // Run as a foreground service so Android keeps the worker alive for
+        // the whole transfer. Without setForeground() the worker is killed
+        // after ~10 minutes and the progress notification is cancelled.
+        try {
+            setForeground(notifier.buildForegroundInfo())
+        } catch (e: Exception) {
+            reportException(e)
+        }
+
         notifier.showProgress(null)
 
         return try {
