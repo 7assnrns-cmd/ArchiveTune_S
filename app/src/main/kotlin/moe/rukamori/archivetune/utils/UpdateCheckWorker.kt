@@ -13,7 +13,10 @@ import androidx.work.WorkerParameters
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.first
 import moe.rukamori.archivetune.BuildConfig
+import moe.rukamori.archivetune.constants.AutoDownloadUpdatesKey
 import moe.rukamori.archivetune.constants.AutomaticUpdateCheckKey
+import moe.rukamori.archivetune.constants.UpdatesWifiOnlyKey
+import moe.rukamori.archivetune.updates.UpdateDownloadScheduler
 import moe.rukamori.archivetune.constants.UpdateChannel
 import moe.rukamori.archivetune.constants.UpdateChannelKey
 import moe.rukamori.archivetune.defaultUpdateChannel
@@ -49,6 +52,24 @@ class UpdateCheckWorker(
                     latestVersion,
                     updateChannel,
                 )
+
+                val autoDownload = preferences[AutoDownloadUpdatesKey] ?: false
+                if (autoDownload) {
+                    val wifiOnly = preferences[UpdatesWifiOnlyKey] ?: true
+                    val downloadUrl =
+                        when (updateChannel) {
+                            UpdateChannel.MY_VERSION -> Updater.getLatestDownloadUrl()
+                            UpdateChannel.OFFICIAL_VERSION -> Updater.getOfficialLatestDownloadUrl()
+                        }
+                    if (downloadUrl.isNotBlank()) {
+                        UpdateDownloadScheduler.schedule(
+                            applicationContext,
+                            downloadUrl,
+                            latestVersion,
+                            wifiOnly,
+                        )
+                    }
+                }
             }
 
             Result.success()

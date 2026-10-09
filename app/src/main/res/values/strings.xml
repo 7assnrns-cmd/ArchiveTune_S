@@ -1143,4 +1143,22 @@
     <string name="dynamic_theme_sync_with_crossfade_description">Make the theme transition last exactly as long as the audio crossfade.</string>
     <string name="crossfade_manual_selection_title">Crossfade on manual selection</string>
     <string name="crossfade_manual_selection_description">Use crossfade when manually selecting another song.</string>
+    <string name="update_download_channel_name">Update downloads</string>
+    <string name="update_download_channel_desc">Background downloads of app updates</string>
+    <string name="update_download_notification_title">Downloading update</string>
+    <string name="update_download_notification_text">%1$d%%</string>
+    <string name="update_download_complete_title">Update downloaded</string>
+    <string name="update_download_complete_text">Tap to install</string>
+    <string name="update_download_failed_title">Update download failed</string>
+    <string name="updates_auto_download_title">Auto-download updates</string>
+    <string name="updates_auto_download_desc">New releases are downloaded in the background.</string>
+    <string name="updates_wifi_only_title">Wi-Fi only</string>
+    <string name="updates_auto_install_title">Auto-install on next launch</string>
+    <string name="updates_install_now">Install update</string>
+    <string name="updates_delete_download">Delete downloaded update</string>
+    <string name="updates_downloaded_version">Downloaded: %1$s</string>
+    <string name="updates_download_in_background">Download in background</string>
+    <string name="updates_cancel_download">Cancel download</string>
+    <string name="updates_downloading">Downloading…</string>
+    <string name="updates_download_state_title">Background downloads</string>
 </resources>

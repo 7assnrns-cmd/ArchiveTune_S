@@ -108,6 +108,12 @@ import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.channelTitle
 import moe.rukamori.archivetune.constants.UpdateChannel
 import moe.rukamori.archivetune.constants.UpdateChannelKey
+import moe.rukamori.archivetune.constants.AutoDownloadUpdatesKey
+import moe.rukamori.archivetune.constants.UpdatesAutoInstallKey
+import moe.rukamori.archivetune.constants.UpdatesDownloadedApkVersionKey
+import moe.rukamori.archivetune.constants.UpdatesWifiOnlyKey
+import moe.rukamori.archivetune.updates.UpdateApkStorage
+import moe.rukamori.archivetune.updates.UpdateDownloadScheduler
 import moe.rukamori.archivetune.defaultUpdateChannel
 import moe.rukamori.archivetune.ui.component.BottomSheetPage
 import moe.rukamori.archivetune.ui.component.BottomSheetPageState
@@ -158,6 +164,15 @@ fun UpdateScreen(
     val updateSettingsControlsEnabled = updateSettingsState is UpdateSettingsScreenState.Success
     val updateSettingsErrorRes = (updateSettingsState as? UpdateSettingsScreenState.Error)?.messageRes
     val onUpdateSettingsAction = remember(viewModel) { viewModel::onAction }
+    val (autoDownloadUpdates, onAutoDownloadUpdatesChange) =
+        rememberPreference(AutoDownloadUpdatesKey, defaultValue = false)
+    val (updatesWifiOnly, onUpdatesWifiOnlyChange) =
+        rememberPreference(UpdatesWifiOnlyKey, defaultValue = true)
+    val (updatesAutoInstall, onUpdatesAutoInstallChange) =
+        rememberPreference(UpdatesAutoInstallKey, defaultValue = false)
+    val (downloadedApkVersion, onDownloadedApkVersionChange) =
+        rememberPreference(UpdatesDownloadedApkVersionKey, defaultValue = "")
+
     val (updateChannel, onUpdateChannelChange) =
         rememberEnumPreference(
             UpdateChannelKey,
@@ -446,6 +461,16 @@ fun UpdateScreen(
     }
 
 
+    LaunchedEffect(updatesAutoInstall, downloadedApkVersion) {
+        if (updatesAutoInstall &&
+            downloadedApkVersion.isNotBlank() &&
+            downloadedApkVersion != BuildConfig.VERSION_NAME &&
+            UpdateApkStorage.hasPendingApk(context)
+        ) {
+            AppUpdateInstaller.installDownloaded(context)
+        }
+    }
+
     LaunchedEffect(updateChannel) {
         if (!BuildConfig.UPDATER_AVAILABLE) {
             isLoadingCommits = false
@@ -581,7 +606,32 @@ fun UpdateScreen(
                 )
             }
 
-            item(key = "commit_history", contentType = "commit_history") {
+            item(key = "download_prefs", contentType = "download_prefs") {
+                    UpdateDownloadPanel(
+                        autoDownload = autoDownloadUpdates,
+                        onAutoDownloadChange = onAutoDownloadUpdatesChange,
+                        wifiOnly = updatesWifiOnly,
+                        onWifiOnlyChange = onUpdatesWifiOnlyChange,
+                        autoInstall = updatesAutoInstall,
+                        onAutoInstallChange = onUpdatesAutoInstallChange,
+                        downloadedVersion = downloadedApkVersion.takeIf { it.isNotBlank() },
+                        onInstallNow = {
+                            coroutineScope.launch {
+                                AppUpdateInstaller.installDownloaded(context)
+                            }
+                        },
+                        onDeleteDownload = {
+                            UpdateApkStorage.deletePendingApk(context)
+                            UpdateDownloadScheduler.cancel(context)
+                            onDownloadedApkVersionChange("")
+                        },
+                        modifier =
+                            Modifier
+                                .fillMaxWidth()
+                                .widthIn(max = maximumContentWidth),
+                    )
+                }
+                item(key = "commit_history", contentType = "commit_history") {
                 CommitHistorySection(
                     commits = commits,
                     isLoading = isLoadingCommits,
@@ -1018,6 +1068,82 @@ private fun UpdateStatusPanel(
                 }
             
 
+            }
+        }
+    }
+}
+
+@Composable
+private fun UpdateDownloadPanel(
+    autoDownload: Boolean,
+    onAutoDownloadChange: (Boolean) -> Unit,
+    wifiOnly: Boolean,
+    onWifiOnlyChange: (Boolean) -> Unit,
+    autoInstall: Boolean,
+    onAutoInstallChange: (Boolean) -> Unit,
+    downloadedVersion: String?,
+    onInstallNow: () -> Unit,
+    onDeleteDownload: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Card(
+        modifier = modifier.fillMaxWidth(),
+        shape = MaterialTheme.shapes.large,
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainerHigh),
+    ) {
+        Column(
+            modifier = Modifier.padding(20.dp),
+            verticalArrangement = Arrangement.spacedBy(16.dp),
+        ) {
+            Text(
+                text = stringResource(R.string.updates_download_state_title),
+                style = MaterialTheme.typography.titleMedium,
+                fontWeight = FontWeight.Bold,
+            )
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Column(modifier = Modifier.weight(1f)) {
+                    Text(
+                        text = stringResource(R.string.updates_auto_download_title),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Text(
+                        text = stringResource(R.string.updates_auto_download_desc),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+                Switch(checked = autoDownload, onCheckedChange = onAutoDownloadChange)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.updates_wifi_only_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = wifiOnly, onCheckedChange = onWifiOnlyChange, enabled = autoDownload)
+            }
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    text = stringResource(R.string.updates_auto_install_title),
+                    style = MaterialTheme.typography.bodyLarge,
+                    modifier = Modifier.weight(1f),
+                )
+                Switch(checked = autoInstall, onCheckedChange = onAutoInstallChange)
+            }
+            if (!downloadedVersion.isNullOrBlank()) {
+                Text(
+                    text = stringResource(R.string.updates_downloaded_version, downloadedVersion),
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(onClick = onInstallNow, shapes = ButtonDefaults.shapes()) {
+                        Text(stringResource(R.string.updates_install_now))
+                    }
+                    TextButton(onClick = onDeleteDownload) {
+                        Text(stringResource(R.string.updates_delete_download))
+                    }
+                }
             }
         }
     }

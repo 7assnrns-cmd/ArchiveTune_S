@@ -22,6 +22,7 @@ import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.withContext
 import moe.rukamori.archivetune.BuildConfig
+import moe.rukamori.archivetune.updates.UpdateApkStorage
 import okhttp3.ConnectionPool
 import java.io.File
 import java.io.IOException
@@ -90,10 +91,10 @@ object AppUpdateInstaller {
             throw IOException("Update download URL is empty")
         }
 
-        val updateDir = File(context.cacheDir, UpdateDirectoryName)
-        updateDir.mkdirs()
-        updateDir.listFiles()?.forEach { file -> file.deleteRecursively() }
-
+        UpdateApkStorage.clearLegacyCache(context)
+        val updateDir = UpdateApkStorage.directory(context)
+        val targetApk = UpdateApkStorage.apkFile(context)
+        targetApk.takeIf { it.exists() }?.delete()
         val downloadedFile = File(updateDir, DownloadFileName)
 
         client.prepareGet(url).execute { response ->
@@ -124,16 +125,23 @@ object AppUpdateInstaller {
             }
         }
 
-        return if (url.lowercase(Locale.US).substringBefore('?').endsWith(".apk")) {
-            downloadedFile.renameAsApk()
-        } else {
-            extractGmsApk(downloadedFile, File(updateDir, ApkFileName))
-                ?: if (downloadedFile.containsApkManifest()) {
-                    downloadedFile.renameAsApk()
-                } else {
-                    throw IOException("No GMS APK found in update artifact")
-                }
+        val resultFile =
+            if (url.lowercase(Locale.US).substringBefore('?').endsWith(".apk")) {
+                downloadedFile.renameAsApk()
+            } else {
+                extractGmsApk(downloadedFile, targetApk)
+                    ?: if (downloadedFile.containsApkManifest()) {
+                        downloadedFile.renameAsApk()
+                    } else {
+                        throw IOException("No GMS APK found in update artifact")
+                    }
+            }
+        // Ensure the final file lives at UpdateApkStorage.apkFile(context)
+        if (resultFile != targetApk) {
+            resultFile.copyTo(targetApk, overwrite = true)
+            resultFile.delete()
         }
+        return targetApk
     }
 
     private suspend fun emitProgress(
@@ -216,6 +224,38 @@ object AppUpdateInstaller {
                 .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
         context.startActivity(intent)
     }
+
+    suspend fun downloadOnly(
+        context: Context,
+        url: String,
+        onProgress: (Progress) -> Unit,
+    ): Result<File> =
+        try {
+            val apk =
+                withContext(Dispatchers.IO) {
+                    downloadApk(context.applicationContext, url, onProgress)
+                }
+            Result.success(apk)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
+
+    suspend fun installDownloaded(context: Context): Result<Unit> =
+        try {
+            val apk = UpdateApkStorage.apkFile(context.applicationContext)
+            if (!apk.isFile || apk.length() == 0L) {
+                Result.failure(IOException("No downloaded APK"))
+            } else {
+                withContext(Dispatchers.Main) { installApk(context, apk) }
+                Result.success(Unit)
+            }
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Throwable) {
+            Result.failure(e)
+        }
 
     private const val UpdateDirectoryName = "app_update"
     private const val DownloadFileName = "archive-tune-update.download"

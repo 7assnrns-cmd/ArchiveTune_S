@@ -943,6 +943,7 @@ val UpdateChannelKey = stringPreferencesKey("updateChannel")
 val AutoDownloadUpdatesKey = booleanPreferencesKey("autoDownloadUpdates")
 val UpdatesWifiOnlyKey = booleanPreferencesKey("updatesWifiOnly")
 val UpdatesDownloadedApkVersionKey = stringPreferencesKey("updatesDownloadedApkVersion")
+val UpdatesAutoInstallKey = booleanPreferencesKey("updatesAutoInstall")
 val LastUpdateCheckKey = longPreferencesKey("lastUpdateCheck")
 val LastNotifiedVersionKey = stringPreferencesKey("lastNotifiedVersion")
 
