@@ -40,7 +40,7 @@ translator = "1.1.1"
 rhino = "1.9.1"
 markwon = "4.6.2"
 okhttp = "5.4.0"
-accompanist = "1.0.19"
+accompanist = "2a770d0b8c"
 accompanist-core = "0.4.7"
 androidsvg = "1.4"
 aboutLibraries = "15.0.3"
@@ -155,7 +155,7 @@ markwon-image = { module = "io.noties.markwon:image", version.ref = "markwon" }
 markwon-linkify = { module = "io.noties.markwon:linkify", version.ref = "markwon" }
 markwon-simple-ext = { module = "io.noties.markwon:simple-ext", version.ref = "markwon" }
 
-accompanist-lyrics-ui = { module = "com.mocharealm.accompanist:lyrics-ui", version.ref = "accompanist" }
+accompanist-lyrics-ui = { module = "com.github.7assnrns-cmd.accompanist-lyrics-ui:lyrics-ui", version.ref = "accompanist" }
 accompanist-lyrics-core = { module = "com.mocharealm.accompanist:lyrics-core", version.ref = "accompanist-core" }
 androidsvg = { module = "com.caverock:androidsvg-aar", version.ref = "androidsvg" }
 aboutlibraries-core = { module = "com.mikepenz:aboutlibraries-core", version.ref = "aboutLibraries" }
