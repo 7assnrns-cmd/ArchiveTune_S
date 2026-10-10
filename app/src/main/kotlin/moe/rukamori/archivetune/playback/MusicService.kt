@@ -2815,7 +2815,7 @@ private data class PendingCrossfadeQueueSwap(
                     // relies on. Without it the ramp started while primary was
                     // still rebuffering on the target item — producing the gap
                     // the user reported between the old and new track.
-                    if (!awaitPrimaryCrossfadeHandoffReady(incoming)) {
+                    if (!awaitPrimaryCrossfadeHandoffReady(incoming, targetIndex, incomingPosition)) {
                         Timber.tag(TAG).w("CF-iq: primary not ready for handoff")
                         abortCrossfadeAndResumePrimary("manual_handoff_not_ready")
                         return@launch
@@ -3439,7 +3439,7 @@ private data class PendingCrossfadeQueueSwap(
             player.seekTo(targetIndex, incomingPosition)
             player.playWhenReady = shouldContinuePlayback
             if (shouldContinuePlayback) {
-                if (!awaitPrimaryCrossfadeHandoffReady(incomingPlayer)) {
+                if (!awaitPrimaryCrossfadeHandoffReady(incomingPlayer, targetIndex, incomingPosition)) {
                     abortCrossfadeAndResumePrimary("primary_handoff_not_ready")
                     handoffCompleted = true
                     return
@@ -3518,7 +3518,11 @@ private data class PendingCrossfadeQueueSwap(
         scheduleCrossfade()
     }
 
-    private suspend fun awaitPrimaryCrossfadeHandoffReady(incomingPlayer: ExoPlayer): Boolean {
+    private suspend fun awaitPrimaryCrossfadeHandoffReady(
+        incomingPlayer: ExoPlayer,
+        targetIndex: Int = C.INDEX_UNSET,
+        targetPositionMs: Long = 0L,
+    ): Boolean {
         val deadlineMs = android.os.SystemClock.elapsedRealtime() + CROSSFADE_HANDOFF_READY_TIMEOUT_MS
         while (kotlinx.coroutines.currentCoroutineContext().isActive && android.os.SystemClock.elapsedRealtime() < deadlineMs) {
             val state = player.playbackState
@@ -3537,7 +3541,26 @@ private data class PendingCrossfadeQueueSwap(
                 // uses in awaitCrossfadePlayerReady.
                 player.prepare()
             } else if (state == Player.STATE_ENDED) {
-                return false
+                // The outgoing track can hit its end during the fade
+                // window, especially when the user switches near the
+                // closing seconds. The subsequent seekTo(targetIndex)
+                // does not always clear the ENDED state before this
+                // function runs, so bailing here aborted the crossfade
+                // in the very first poll (about 5 ms after the seek).
+                // If we are still pointed at the wrong item, re-issue the
+                // seek and prepare; otherwise, the target itself has
+                // ended (rare) and we give up.
+                if (targetIndex != C.INDEX_UNSET && player.currentMediaItemIndex != targetIndex) {
+                    Timber.tag(TAG).d(
+                        "CF-handoff primary ENDED on wrong item (current=%d target=%d); re-seeking",
+                        player.currentMediaItemIndex, targetIndex,
+                    )
+                    player.seekTo(targetIndex, targetPositionMs)
+                    player.prepare()
+                } else {
+                    Timber.tag(TAG).d("CF-handoff primary ENDED on target; aborting")
+                    return false
+                }
             }
             delay(CROSSFADE_HANDOFF_POLL_MS)
         }
@@ -3721,7 +3744,12 @@ private data class PendingCrossfadeQueueSwap(
             player.playbackState == Player.STATE_ENDED ||
                 (player.duration != C.TIME_UNSET && player.currentPosition >= player.duration)
 
-        crossfadeSuppressedMediaId = currentMediaId
+        // Do NOT set crossfadeSuppressedMediaId here. The previous
+        // behaviour permanently suppressed auto-crossfade for whatever
+        // media item the primary was on when the handoff aborted — which,
+        // after a seek, is the *incoming* track. That prevented auto
+        // crossfade on the very song the user had just switched to.
+        // Suppression is now cleared on any media-item transition instead.
 
         Timber.tag(TAG).w("Falling back to primary playback after crossfade failure: reason=%s", reason)
 
@@ -7431,6 +7459,12 @@ private data class PendingCrossfadeQueueSwap(
             }
         }
         ensurePresenceManager()
+        // Any transition to a new media item invalidates the suppression set
+        // by a previous failed crossfade. Without this, a single failed
+        // manual handoff on track X would suppress auto-crossfade for X for
+        // the entire remainder of the track — matching the reported
+        // "auto crossfade never runs after manual transition".
+        crossfadeSuppressedMediaId = null
         if (!isCrossfading) {
             scheduleCrossfade()
         }
