@@ -332,6 +332,7 @@ dependencies {
     implementation(libs.compose.animation)
     implementation(libs.compose.material.icons.extended)
     implementation(libs.compose.reorderable)
+    implementation(libs.backdrop)
 
     implementation(libs.viewmodel)
     implementation(libs.viewmodel.compose)
