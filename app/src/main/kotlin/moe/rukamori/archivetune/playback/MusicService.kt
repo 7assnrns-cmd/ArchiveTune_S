@@ -2709,6 +2709,14 @@ private data class PendingCrossfadeQueueSwap(
             targetIndex, player.currentMediaItemIndex, player.mediaItemCount,
             secondaryCrossfadePlayer != null)
 
+        // Kick off URL resolution for the incoming track now, in parallel
+        // with the fade loop. By the time the fade ends and primary is asked
+        // to seek to the target, the resolver cache should already hold the
+        // URL. Otherwise the primary would resolve it from scratch after the
+        // fade and the handoff would time out — the exact failure the CF-iq
+        // logs showed.
+        warmCrossfadeCache(targetIndex)
+
         val incoming = prepareSecondaryCrossfadePlayer(target) ?: return false
         val duration = effectiveCrossfadeDuration(player.duration) ?: crossfadeDurationMs
         if (duration < MIN_CROSSFADE_DURATION_MS) {
@@ -7630,6 +7638,89 @@ private data class PendingCrossfadeQueueSwap(
                     pinnedFormatId = null,
                 ),
         )
+    }
+
+    /**
+     * Pre-resolve the audio stream URL for a specific target index before the
+     * primary player needs it. Called from requestCrossfadeToIndex at the
+     * moment the crossfade is accepted, while the fade loop is still running.
+     *
+     * Rationale: the manual crossfade path calls player.seekTo(targetIndex)
+     * *after* the fade completes. If the resolver cache does not already hold
+     * the URL for that target, the primary player pays the full YouTube
+     * resolve cost (3-6s) at that point, and awaitPrimaryCrossfadeHandoffReady
+     * times out. This warm-up runs during the fade window so the seek is a
+     * cache hit.
+     *
+     * The AudioStreamRequest MUST match what resolvePlaybackDataSpec builds
+     * for the primary player, or the ResolveAudioStreamUseCase cache key will
+     * differ and the warm-up will not help. Notably that means using
+     * YouTube.currentPlaybackAuthState() (live) rather than a snapshot, using
+     * the live low-data-mode state, and deriving pinnedFormatId from the same
+     * sources as the primary path.
+     */
+    private fun warmCrossfadeCache(targetIndex: Int) {
+        val mediaItem = runCatching { player.getMediaItemAt(targetIndex) }.getOrNull() ?: return
+        val mediaId =
+            (mediaItem.localConfiguration?.customCacheKey ?: mediaItem.mediaId)
+                .trim()
+                .takeIf(String::isNotEmpty)
+                ?: return
+        if (mediaId.isLocalMediaId()) return
+        if ((mediaItem.localConfiguration?.uri)?.shouldBypassYouTubeResolver() == true) return
+
+        scope.launch(Dispatchers.IO) {
+            runCatching {
+                if (resolveAudioStream.peek(
+                        AudioStreamRequest(
+                            mediaId = mediaId,
+                            quality =
+                                if (isLowDataModeActive()) AudioQuality.LOW else audioQuality,
+                            networkMetered = isLowDataModeActive(),
+                            purpose = StreamPurpose.PLAYBACK,
+                            authState = YouTube.currentPlaybackAuthState(),
+                        ),
+                    ) != null
+                ) {
+                    return@launch
+                }
+
+                val lowDataModeActive = isLowDataModeActive()
+                val storedFormat = database.getFormatByIdBlocking(mediaId)
+                val cachedMetadata =
+                    if (mediaId !in cacheBypassMediaIds &&
+                        playerCache.getCachedSpans(mediaId).isNotEmpty()
+                    ) {
+                        playerCache.getContentMetadata(mediaId)
+                    } else {
+                        null
+                    }
+                val pinnedFormatId =
+                    cachedMetadata
+                        ?.let { metadata ->
+                            metadata
+                                .get(PLAYBACK_FORMAT_ID_METADATA_KEY, -1L)
+                                .toInt()
+                                .takeIf { it > 0 }
+                        }
+                        ?: storedFormat?.itag?.takeIf { it > 0 }
+
+                resolveAudioStream.preload(
+                    AudioStreamRequest(
+                        mediaId = mediaId,
+                        quality =
+                            if (lowDataModeActive) AudioQuality.LOW else audioQuality,
+                        networkMetered = lowDataModeActive,
+                        purpose = StreamPurpose.PLAYBACK,
+                        authState = YouTube.currentPlaybackAuthState(),
+                        pinnedFormatId = pinnedFormatId,
+                    ),
+                )
+                Timber.tag(TAG).d("CF-warm cache primed for mediaId=%s", mediaId)
+            }.onFailure { error ->
+                Timber.tag(TAG).w(error, "CF-warm preload failed for mediaId=%s", mediaId)
+            }
+        }
     }
 
     override fun onEvents(
