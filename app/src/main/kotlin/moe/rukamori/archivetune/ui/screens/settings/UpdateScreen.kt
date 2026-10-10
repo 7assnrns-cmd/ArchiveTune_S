@@ -17,8 +17,15 @@ import androidx.activity.result.contract.ActivityResultContracts
 import androidx.annotation.DrawableRes
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.animateContentSize
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
 import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.ColumnScope
@@ -84,6 +91,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.rotate
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.layout.ContentScale
@@ -96,6 +104,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.core.content.ContextCompat
 import androidx.hilt.lifecycle.viewmodel.compose.hiltViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -106,6 +115,7 @@ import kotlinx.coroutines.launch
 import moe.rukamori.archivetune.BuildConfig
 import moe.rukamori.archivetune.LocalPlayerAwareWindowInsets
 import moe.rukamori.archivetune.R
+import moe.rukamori.archivetune.LocalAnimationsDisabled
 import moe.rukamori.archivetune.channelTitle
 import moe.rukamori.archivetune.constants.UpdateChannel
 import moe.rukamori.archivetune.constants.UpdateChannelKey
@@ -121,6 +131,7 @@ import moe.rukamori.archivetune.ui.component.BottomSheetPage
 import moe.rukamori.archivetune.ui.component.BottomSheetPageState
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.MarkdownText
+import moe.rukamori.archivetune.ui.component.drawHyperOsGradient
 import moe.rukamori.archivetune.ui.utils.appBarScrollBehavior
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.utils.AppUpdateInstaller
@@ -608,12 +619,33 @@ fun UpdateScreen(
             UpdateChannel.OFFICIAL_VERSION -> stringResource(R.string.channel_official_version)
         }
 
+    // HyperOS-style animated background. Two components: the phase driver
+    // (always created, per Compose rules) and the dark/light palette
+    // selector. When animations are disabled system-wide, phase is forced
+    // to 0f and the gradient becomes static.
+    val hyperOsAnimationsDisabled = LocalAnimationsDisabled.current
+    val hyperOsDark = isSystemInDarkTheme()
+    val hyperOsTransition = rememberInfiniteTransition(label = "hyperos_bg")
+    val hyperOsPhaseRaw by
+        hyperOsTransition.animateFloat(
+            initialValue = 0f,
+            targetValue = (2f * Math.PI.toFloat()),
+            animationSpec =
+                infiniteRepeatable(
+                    animation = tween(40_000, easing = LinearEasing),
+                    repeatMode = RepeatMode.Restart,
+                ),
+            label = "hyperos_phase",
+        )
+    val hyperOsPhase = if (hyperOsAnimationsDisabled) 0f else hyperOsPhaseRaw
+
     Scaffold(
         modifier =
             Modifier
                 .fillMaxSize()
+                .drawBehind { drawHyperOsGradient(hyperOsPhase, hyperOsDark) }
                 .nestedScroll(scrollBehavior.nestedScrollConnection),
-        containerColor = MaterialTheme.colorScheme.surface,
+        containerColor = Color.Transparent,
         contentWindowInsets = WindowInsets(0, 0, 0, 0),
         snackbarHost = { SnackbarHost(hostState = snackbarHostState) },
         topBar = {
@@ -646,8 +678,8 @@ fun UpdateScreen(
                 scrollBehavior = scrollBehavior,
                 colors =
                     TopAppBarDefaults.topAppBarColors(
-                        containerColor = MaterialTheme.colorScheme.surface,
-                        scrolledContainerColor = MaterialTheme.colorScheme.surfaceContainer,
+                        containerColor = Color.Transparent,
+                        scrolledContainerColor = Color.Transparent,
                     ),
             )
         },
@@ -937,6 +969,53 @@ fun UpdateScreen(
     }
 }
 
+/**
+ * HyperOS-style hero: large app name with the current version below,
+ * tappable to trigger an update check. Sits above the update status card.
+ */
+@Composable
+private fun HyperOsHero(
+    appName: String,
+    version: String,
+    onVersionClick: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier =
+            modifier
+                .fillMaxWidth()
+                .padding(top = 24.dp, bottom = 16.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+    ) {
+        Text(
+            text = appName,
+            style =
+                MaterialTheme.typography.headlineLarge.copy(
+                    fontWeight = FontWeight.ExtraBold,
+                    fontSize = 34.sp,
+                    letterSpacing = (-0.5).sp,
+                ),
+            color = MaterialTheme.colorScheme.onBackground,
+            textAlign = TextAlign.Center,
+            modifier = Modifier.padding(horizontal = 24.dp),
+        )
+        Spacer(Modifier.height(6.dp))
+        Surface(
+            onClick = onVersionClick,
+            shape = MaterialTheme.shapes.extraLarge,
+            color = Color.Transparent,
+            contentColor = MaterialTheme.colorScheme.onBackground,
+        ) {
+            Text(
+                text = version,
+                style = MaterialTheme.typography.titleSmall,
+                color = MaterialTheme.colorScheme.onBackground.copy(alpha = 0.7f),
+                modifier = Modifier.padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+        }
+    }
+}
+
 @Composable
 private fun UpdateDashboard(
     currentVersion: String,
@@ -956,37 +1035,52 @@ private fun UpdateDashboard(
     onArtifactSelected: () -> Unit,
 ) {
     if (useWideLayout) {
-        Row(
+        Column(
             modifier = modifier,
-            horizontalArrangement = Arrangement.spacedBy(20.dp),
-            verticalAlignment = Alignment.Top,
+            verticalArrangement = Arrangement.spacedBy(20.dp),
         ) {
-            UpdateStatusPanel(
-                currentVersion = currentVersion,
-                latestVersion = latestVersion,
-                updateChannel = updateChannel,
-                isUpdateAvailable = isUpdateAvailable,
-                onCheckForUpdate = onCheckForUpdate,
-                onOpenChangelog = onOpenChangelog,
-                modifier = Modifier.weight(1f),
+            HyperOsHero(
+                appName = stringResource(R.string.updates_app_display_name),
+                version = currentVersion,
+                onVersionClick = onCheckForUpdate,
             )
-            UpdatePreferencesPanel(
-                automaticUpdateChecksEnabled = automaticUpdateChecksEnabled,
-                enableUpdateNotification = enableUpdateNotification,
-                controlsEnabled = updateSettingsControlsEnabled,
-                updateChannel = updateChannel,
-                onAutomaticUpdateChecksChange = onAutomaticUpdateChecksChange,
-                onUpdateNotificationChange = onUpdateNotificationChange,
-                onStableSelected = onStableSelected,
-                onArtifactSelected = onArtifactSelected,
-                modifier = Modifier.weight(1f),
-            )
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(20.dp),
+                verticalAlignment = Alignment.Top,
+            ) {
+                UpdateStatusPanel(
+                    currentVersion = currentVersion,
+                    latestVersion = latestVersion,
+                    updateChannel = updateChannel,
+                    isUpdateAvailable = isUpdateAvailable,
+                    onCheckForUpdate = onCheckForUpdate,
+                    onOpenChangelog = onOpenChangelog,
+                    modifier = Modifier.weight(1f),
+                )
+                UpdatePreferencesPanel(
+                    automaticUpdateChecksEnabled = automaticUpdateChecksEnabled,
+                    enableUpdateNotification = enableUpdateNotification,
+                    controlsEnabled = updateSettingsControlsEnabled,
+                    updateChannel = updateChannel,
+                    onAutomaticUpdateChecksChange = onAutomaticUpdateChecksChange,
+                    onUpdateNotificationChange = onUpdateNotificationChange,
+                    onStableSelected = onStableSelected,
+                    onArtifactSelected = onArtifactSelected,
+                    modifier = Modifier.weight(1f),
+                )
+            }
         }
     } else {
         Column(
             modifier = modifier,
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
+            HyperOsHero(
+                appName = stringResource(R.string.updates_app_display_name),
+                version = currentVersion,
+                onVersionClick = onCheckForUpdate,
+            )
             UpdateStatusPanel(
                 currentVersion = currentVersion,
                 latestVersion = latestVersion,
