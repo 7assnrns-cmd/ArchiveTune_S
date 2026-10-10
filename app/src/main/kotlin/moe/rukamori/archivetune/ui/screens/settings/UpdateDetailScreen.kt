@@ -67,6 +67,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.draw.drawBehind
+import androidx.compose.ui.draw.rotate
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
@@ -589,17 +590,13 @@ private fun HyperOsCard(
                         modifier =
                             Modifier
                                 .size(16.dp)
-                                .androidxRotate(),
+                                .rotate(180f),
                     )
                 }
             }
         }
     }
 }
-
-/** Rotate the back-arrow by 180° to look like a forward chevron. */
-private fun Modifier.androidxRotate(): Modifier =
-    androidx.compose.ui.draw.rotate(this, 180f)
 
 @Composable
 private fun DownloadButton(onClick: () -> Unit) {
