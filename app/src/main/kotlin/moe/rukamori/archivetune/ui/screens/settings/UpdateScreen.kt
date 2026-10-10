@@ -24,6 +24,7 @@ import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Box
@@ -123,6 +124,8 @@ import moe.rukamori.archivetune.constants.AutoDownloadUpdatesKey
 import moe.rukamori.archivetune.constants.UpdatesAutoInstallKey
 import moe.rukamori.archivetune.constants.UpdatesDownloadedApkVersionKey
 import moe.rukamori.archivetune.constants.UpdatesWifiOnlyKey
+import moe.rukamori.archivetune.ui.component.bouncyPress
+import moe.rukamori.archivetune.ui.component.rememberBouncyPressScale
 import moe.rukamori.archivetune.updates.ApkAsset
 import moe.rukamori.archivetune.updates.UpdateApkStorage
 import moe.rukamori.archivetune.updates.UpdateDownloadScheduler
@@ -1111,6 +1114,8 @@ private fun UpdateStatusPanel(
             MaterialTheme.colorScheme.onSecondaryContainer
         }
     val statusShape = MaterialShapes.SoftBurst.toShape()
+    val checkInteractionSource = remember { MutableInteractionSource() }
+    val checkPressScale = rememberBouncyPressScale(checkInteractionSource)
 
     Card(
         modifier = modifier.fillMaxWidth(),
@@ -1190,10 +1195,12 @@ private fun UpdateStatusPanel(
             ) {
                 Button(
                     onClick = onCheckForUpdate,
+                    interactionSource = checkInteractionSource,
                     modifier =
                         Modifier
                             .fillMaxWidth()
-                            .heightIn(min = 48.dp),
+                            .heightIn(min = 48.dp)
+                            .bouncyPress(checkPressScale),
                     shapes = ButtonDefaults.shapes(),
                 ) {
                     Icon(

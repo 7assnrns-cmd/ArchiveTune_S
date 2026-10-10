@@ -19,6 +19,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -88,7 +89,9 @@ import moe.rukamori.archivetune.R
 import moe.rukamori.archivetune.constants.UpdateChannel
 import moe.rukamori.archivetune.ui.component.IconButton
 import moe.rukamori.archivetune.ui.component.MarkdownText
+import moe.rukamori.archivetune.ui.component.bouncyPress
 import moe.rukamori.archivetune.ui.component.drawHyperOsGradient
+import moe.rukamori.archivetune.ui.component.rememberBouncyPressScale
 import moe.rukamori.archivetune.ui.utils.backToMain
 import moe.rukamori.archivetune.updates.ApkAsset
 import moe.rukamori.archivetune.updates.UpdateDownloadScheduler
@@ -512,13 +515,17 @@ private fun HyperOsCard(
     onClick: () -> Unit,
 ) {
     val cardShape = RoundedCornerShape(24.dp)
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScale = rememberBouncyPressScale(interactionSource)
     Surface(
         onClick = onClick,
         shape = cardShape,
+        interactionSource = interactionSource,
         modifier =
             Modifier
                 .fillMaxWidth()
-                .aspectRatio(0.85f),
+                .aspectRatio(0.85f)
+                .bouncyPress(pressScale),
         color = Color.Transparent,
     ) {
         Box(
@@ -600,12 +607,16 @@ private fun HyperOsCard(
 
 @Composable
 private fun DownloadButton(onClick: () -> Unit) {
+    val interactionSource = remember { MutableInteractionSource() }
+    val pressScale = rememberBouncyPressScale(interactionSource)
     Button(
         onClick = onClick,
+        interactionSource = interactionSource,
         modifier =
             Modifier
                 .fillMaxWidth()
-                .height(56.dp),
+                .height(56.dp)
+                .bouncyPress(pressScale),
         shapes = ButtonDefaults.shapes(),
         colors =
             ButtonDefaults.buttonColors(
