@@ -1172,4 +1172,19 @@
     <string name="update_abi_size_unknown">size unknown</string>
     <string name="updates_download_started">Download started</string>
     <string name="updates_app_display_name">ArchiveTune S</string>
+    <string name="update_detail_title">Software update</string>
+    <string name="update_detail_checking">Checking for updates</string>
+    <string name="update_detail_checking_hint">This may take a few seconds</string>
+    <string name="update_detail_up_to_date">You are up to date</string>
+    <string name="update_detail_update_available">An update is available</string>
+    <string name="update_detail_best_device">Best for your device</string>
+    <string name="update_detail_universal">Universal (all devices)</string>
+    <string name="update_detail_learn_more">Learn what\'s new</string>
+    <string name="update_detail_download">Download update</string>
+    <string name="update_detail_current_version">Current version</string>
+    <string name="update_detail_new_version">New version</string>
+    <string name="update_detail_size_unknown">size unknown</string>
+    <string name="update_detail_updated_apps">Updated apps</string>
+    <string name="update_detail_retry">Retry</string>
+    <string name="update_detail_error">Could not check for updates</string>
 </resources>

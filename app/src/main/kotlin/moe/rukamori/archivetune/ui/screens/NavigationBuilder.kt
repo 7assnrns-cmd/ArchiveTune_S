@@ -483,6 +483,21 @@ fun NavGraphBuilder.navigationBuilder(
         }
     }
     composable(
+        route = "settings/update_detail?channel={channel}",
+        arguments =
+            listOf(
+                navArgument("channel") {
+                    type = NavType.StringType
+                    nullable = true
+                    defaultValue = null
+                },
+            ),
+    ) { backStackEntry ->
+        val channelName = backStackEntry.arguments?.getString("channel")
+        val channel = UpdateChannel.fromStoredName(channelName, defaultUpdateChannel)
+        UpdateDetailScreen(navController, channel = channel)
+    }
+    composable(
         route = "settings/changelog?channel={channel}",
         arguments =
             listOf(

@@ -43,44 +43,51 @@ private val HyperOsLightBase = Color(0xFFFFF7FA)
  * orbits. When animations are disabled by the caller, pass 0f for a static
  * gradient.
  *
- * The three circles are drawn with [BlendMode.Screen] so their colors mix
- * additively — that is what gives the HyperOS "breathing" feel rather than
- * three hard-edged discs.
+ * The three circles use a multi-stop radial gradient with SrcOver blending
+ * so they read as soft regions of color rather than hard-edged discs. An
+ * earlier version used [BlendMode.Screen]; that formula reduces to near
+ * white on light backgrounds and erased the colors entirely.
  */
 fun DrawScope.drawHyperOsGradient(phase: Float, dark: Boolean) {
     val colors = if (dark) HyperOsDarkColors else HyperOsLightColors
     val base = if (dark) HyperOsDarkBase else HyperOsLightBase
 
-    // Solid base color — the Screen blend modes composit against this.
     drawRect(color = base)
 
     val w = size.width
     val h = size.height
-    // Circle radius scales with the larger dimension so the effect is
-    // consistent across phone and tablet layouts.
-    val radius = maxOf(w, h) * 0.85f
+    // Blobs are larger than the screen so their fade tails wash over most
+    // of the surface. Small blobs read as discs, not as a gradient.
+    val radius = maxOf(w, h) * 1.15f
 
     colors.forEachIndexed { index, color ->
         val offsetPhase = phase + (index * 2f * PI.toFloat() / 3f)
-        // Lissajous-ish path: x and y use different multipliers so the circles
-        // don't trace the same ellipse.
-        val cx = w / 2f + cos(offsetPhase) * w * 0.28f
-        val cy = h / 2f + sin(offsetPhase * 0.7f) * h * 0.22f
+        val cx = w / 2f + cos(offsetPhase) * w * 0.32f
+        val cy = h / 2f + sin(offsetPhase * 0.65f) * h * 0.28f
         val center = Offset(cx, cy)
 
-        // Radial gradient with an alpha falloff so edges fade out instead of
-        // ending abruptly. Alpha adjusted for light vs dark so contrast stays
-        // consistent with the base.
-        val alpha = if (dark) 0.85f else 0.75f
+        // Multi-stop gradient: hold the color for the first stretch, then
+        // fade. Without a flat core the shape reads as a circle outline;
+        // with it, it reads as a soft region of color.
+        //
+        // SrcOver (the default). Screen was masking the colors on light
+        // backgrounds because its formula keeps the result near white when
+        // the destination is already light.
+        val alpha = if (dark) 0.75f else 0.80f
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(color.copy(alpha = alpha), Color.Transparent),
+                colorStops = arrayOf(
+                    0.00f to color.copy(alpha = alpha),
+                    0.35f to color.copy(alpha = alpha * 0.85f),
+                    0.75f to color.copy(alpha = alpha * 0.30f),
+                    1.00f to Color.Transparent,
+                ),
                 center = center,
                 radius = radius,
             ),
             radius = radius,
             center = center,
-            blendMode = BlendMode.Screen,
         )
     }
 }
+
